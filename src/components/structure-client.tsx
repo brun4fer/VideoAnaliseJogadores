@@ -24,8 +24,9 @@ export function StructureClient() {
 
   async function submit(event: FormEvent<HTMLFormElement>, kind: string) {
     event.preventDefault(); setBusy(true); setNotice(null);
-    const form = new FormData(event.currentTarget); const body = Object.fromEntries(form.entries());
-    try { await apiFetch("/api/structure", { method: "POST", body: JSON.stringify({ ...body, kind, seasonId, competitionId, clubId, isGoalkeeper: body.isGoalkeeper === "on" }) }); event.currentTarget.reset(); setNotice("Guardado com sucesso."); await load(); }
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement); const body = Object.fromEntries(form.entries());
+    try { await apiFetch("/api/structure", { method: "POST", body: JSON.stringify({ ...body, kind, seasonId, competitionId, clubId, isGoalkeeper: body.isGoalkeeper === "on" }) }); formElement.reset(); setNotice("Guardado com sucesso."); await load(); }
     catch (e) { setNotice(e instanceof Error ? e.message : "Não foi possível guardar."); } finally { setBusy(false); }
   }
   async function remove(resource: string, id: string, label: string) { if (!confirm(`Eliminar ${label}? Os dados dependentes também serão eliminados.`)) return; try { await apiFetch(`/api/structure/${resource}/${id}`, { method: "DELETE" }); await load(); } catch (e) { setNotice(e instanceof Error ? e.message : "Não foi possível eliminar."); } }
