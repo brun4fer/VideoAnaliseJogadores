@@ -6,7 +6,7 @@ export const SESSION_COOKIE = "player_analysis_session";
 const SESSION_DAYS = 7;
 
 export class AuthError extends Error {
-  constructor(message = "Sessão inválida ou expirada.") { super(message); this.name = "AuthError"; }
+  constructor(message = "Invalid or expired session.") { super(message); this.name = "AuthError"; }
 }
 
 export function hashPassword(password: string) {
@@ -22,7 +22,7 @@ export function verifyPassword(password: string, stored: string) {
 }
 
 export function validatePassword(password: string) {
-  if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) throw new Error("A palavra-passe deve ter pelo menos 8 caracteres, uma letra e um número.");
+  if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) throw new Error("The password must contain at least 8 characters, one letter and one number.");
 }
 
 function tokenHash(token: string) { return createHash("sha256").update(token).digest("hex"); }

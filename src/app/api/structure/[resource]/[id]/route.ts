@@ -9,7 +9,7 @@ export async function DELETE(_: Request, context: { params: Promise<{ resource: 
     else if (resource === "competition") await prisma.competition.deleteMany({ where: { id, workspaceId: workspace.id } });
     else if (resource === "opponent") await prisma.club.deleteMany({ where: { id, workspaceId: workspace.id, isClientClub: false } });
     else if (resource === "player") await prisma.player.deleteMany({ where: { id, workspaceId: workspace.id, club: { isClientClub: true } } });
-    else return badRequest("Recurso inválido.");
+    else return badRequest("Invalid resource.");
     return ok({ deleted: true });
   } catch (error) { return serverError(error); }
 }

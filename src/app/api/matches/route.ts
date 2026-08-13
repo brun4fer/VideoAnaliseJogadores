@@ -13,14 +13,14 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const { workspace } = await requireAccount(); const body = await request.json();
-    if (!body.opponentClubId || !body.competitionId) return badRequest("Seleciona a competição e a equipa adversária.");
+    if (!body.opponentClubId || !body.competitionId) return badRequest("Select the competition and opponent.");
     const [clientClub, competition, opponent] = await Promise.all([
       prisma.club.findFirst({ where: { workspaceId: workspace.id, isClientClub: true } }),
       prisma.competition.findFirst({ where: { id: body.competitionId, workspaceId: workspace.id } }),
       prisma.club.findFirst({ where: { id: body.opponentClubId, workspaceId: workspace.id, isClientClub: false, competitions: { some: { id: body.competitionId } } } }),
     ]);
-    if (!clientClub) return badRequest("Configura primeiro a equipa do cliente.");
-    if (!competition || !opponent) return badRequest("A competição ou o adversário selecionado não é válido.");
+    if (!clientClub) return badRequest("Set up the client team first.");
+    if (!competition || !opponent) return badRequest("The selected competition or opponent is invalid.");
     const match = await prisma.match.create({ data: { matchDate: body.matchDate ? new Date(body.matchDate) : null, roundName: body.roundName?.trim() || null, venue: body.venue?.trim() || null, notes: body.notes?.trim() || null, clubId: clientClub.id, opponentClubId: opponent.id, competitionId: competition.id, workspaceId: workspace.id } });
     return ok(match, 201);
   } catch (error) { return serverError(error); }

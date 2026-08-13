@@ -4,6 +4,6 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
   if (response.status === 401 && typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
     window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
   }
-  if (!response.ok) throw new Error(payload?.error || "O pedido não pôde ser concluído.");
+  if (!response.ok) throw new Error(payload?.error || "The request could not be completed.");
   return payload as T;
 }
