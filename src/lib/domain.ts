@@ -11,10 +11,15 @@ export type ActionRecord = {
 };
 
 export type MatchDetail = {
-  id: string; title: string; opponentName: string; matchDate: string | null; roundName: string | null;
-  venue: string | null; notes: string | null; clubId: string; competitionId: string;
+  id: string; matchDate: string | null; roundName: string | null;
+  venue: string | null; notes: string | null; clubId: string; opponentClubId: string; competitionId: string;
   club: { id: string; name: string; players: PlayerRecord[] };
+  opponentClub: { id: string; name: string };
   competition: { id: string; name: string; season: { id: string; name: string } };
   video: { fileName: string; fileSize: string; durationSeconds: number; mimeType: string } | null;
   playerActions: ActionRecord[];
 };
+
+export function matchLabel(match: { club: { name: string }; opponentClub: { name: string }; roundName?: string | null }) {
+  return `${match.club.name} vs ${match.opponentClub.name}${match.roundName ? ` · ${match.roundName}` : ""}`;
+}

@@ -17,6 +17,33 @@ model Workspace {
   clubs        Club[]
   players      Player[]
   matches      Match[]
+  users        User[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  username     String    @unique
+  passwordHash String
+  workspaceId  String    @unique
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sessions     Session[]
+
+  @@index([workspaceId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Season {
@@ -43,7 +70,7 @@ model Competition {
   updatedAt   DateTime  @updatedAt
   season      Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  clubs       Club[]
+  clubs       Club[]    @relation("CompetitionClubs")
   matches     Match[]
 
   @@unique([seasonId, name])
@@ -52,22 +79,22 @@ model Competition {
 }
 
 model Club {
-  id            String      @id @default(cuid())
-  name          String
-  shortName     String?
-  badgeUrl      String?
-  competitionId String
-  workspaceId   String
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
-  players       Player[]
-  matches       Match[]
+  id              String        @id @default(cuid())
+  name            String
+  shortName       String?
+  badgeUrl        String?
+  isClientClub    Boolean       @default(false)
+  workspaceId     String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  competitions    Competition[] @relation("CompetitionClubs")
+  players         Player[]
+  analyzedMatches Match[]       @relation("AnalyzedClub")
+  opponentMatches Match[]       @relation("OpponentClub")
 
-  @@unique([competitionId, name])
+  @@unique([workspaceId, name])
   @@index([workspaceId])
-  @@index([competitionId])
 }
 
 model Player {
@@ -91,26 +118,27 @@ model Player {
 }
 
 model Match {
-  id            String         @id @default(cuid())
-  title         String
-  opponentName  String
-  matchDate     DateTime?
-  roundName     String?
-  venue         String?
-  notes         String?
-  clubId        String
-  competitionId String
-  workspaceId   String
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  club          Club           @relation(fields: [clubId], references: [id], onDelete: Restrict)
-  competition   Competition    @relation(fields: [competitionId], references: [id], onDelete: Restrict)
-  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  video         Video?
-  playerActions PlayerAction[]
+  id             String         @id @default(cuid())
+  matchDate      DateTime?
+  roundName      String?
+  venue          String?
+  notes          String?
+  clubId         String
+  opponentClubId String
+  competitionId  String
+  workspaceId    String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  club           Club           @relation("AnalyzedClub", fields: [clubId], references: [id], onDelete: Restrict)
+  opponentClub   Club           @relation("OpponentClub", fields: [opponentClubId], references: [id], onDelete: Restrict)
+  competition    Competition    @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  video          Video?
+  playerActions  PlayerAction[]
 
   @@index([workspaceId])
   @@index([clubId])
+  @@index([opponentClubId])
   @@index([competitionId])
 }
 
