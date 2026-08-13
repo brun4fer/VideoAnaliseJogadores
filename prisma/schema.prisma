@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Workspace {
+  id           String        @id @default(cuid())
+  name         String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  seasons      Season[]
+  competitions Competition[]
+  clubs        Club[]
+  players      Player[]
+  matches      Match[]
+}
+
+model Season {
+  id           String        @id @default(cuid())
+  name         String
+  workspaceId  String
+  startDate    DateTime?
+  endDate      DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  competitions Competition[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+model Competition {
+  id          String    @id @default(cuid())
+  name        String
+  seasonId    String
+  workspaceId String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  season      Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clubs       Club[]
+  matches     Match[]
+
+  @@unique([seasonId, name])
+  @@index([workspaceId])
+  @@index([seasonId])
+}
+
+model Club {
+  id            String      @id @default(cuid())
+  name          String
+  shortName     String?
+  badgeUrl      String?
+  competitionId String
+  workspaceId   String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  players       Player[]
+  matches       Match[]
+
+  @@unique([competitionId, name])
+  @@index([workspaceId])
+  @@index([competitionId])
+}
+
+model Player {
+  id           String         @id @default(cuid())
+  name         String
+  shirtNumber  Int?
+  photoUrl     String?
+  position     String?
+  isGoalkeeper Boolean        @default(false)
+  active       Boolean        @default(true)
+  clubId       String
+  workspaceId  String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  club         Club           @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actions      PlayerAction[]
+
+  @@index([clubId])
+  @@index([workspaceId])
+}
+
+model Match {
+  id            String         @id @default(cuid())
+  title         String
+  opponentName  String
+  matchDate     DateTime?
+  roundName     String?
+  venue         String?
+  notes         String?
+  clubId        String
+  competitionId String
+  workspaceId   String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  club          Club           @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  competition   Competition    @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  video         Video?
+  playerActions PlayerAction[]
+
+  @@index([workspaceId])
+  @@index([clubId])
+  @@index([competitionId])
+}
+
+model Video {
+  id              String    @id @default(cuid())
+  matchId         String    @unique
+  fileName        String
+  fileSize        BigInt
+  durationSeconds Float
+  mimeType        String
+  lastModified    DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  match           Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+}
+
+model PlayerAction {
+  id               String   @id @default(cuid())
+  matchId          String
+  playerId         String
+  actionKey        String
+  actionName       String
+  eventTimeSeconds Float
+  startTimeSeconds Float
+  endTimeSeconds   Float
+  fieldX           Float?
+  fieldY           Float?
+  notes            String?
+  outcome          String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  match            Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player           Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([playerId])
+  @@index([actionKey])
+}
