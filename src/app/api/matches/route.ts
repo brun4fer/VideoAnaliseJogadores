@@ -5,15 +5,18 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   try {
     const { workspace } = await requireAccount();
-    const matches = await prisma.match.findMany({ where: { workspaceId: workspace.id }, orderBy: [{ matchDate: "desc" }, { createdAt: "desc" }], include: { club: true, opponentClub: true, competition: { include: { season: true } }, video: true, _count: { select: { playerActions: true } } } });
-    return ok(matches.map(({ video, ...match }) => ({ ...match, video: video ? { ...video, fileSize: video.fileSize.toString() } : null })));
+    const matches = await prisma.match.findMany({ where: { workspaceId: workspace.id }, orderBy: [{ matchDate: "desc" }, { createdAt: "desc" }], include: { club: true, opponentClub: true, competition: { include: { season: true } }, video: true, _count: { select: { playerActions: true, squad: true } } } });
+    return ok(matches.map(({ video, ...match }) => ({ ...match, video: video ? { ...video, fileSize: video.fileSize.toString() } : null }))) ;
   } catch (error) { return serverError(error); }
 }
 
 export async function POST(request: Request) {
   try {
-    const { workspace } = await requireAccount(); const body = await request.json();
+    const { workspace } = await requireAccount();
+    const body = await request.json();
     if (!body.opponentClubId || !body.competitionId) return badRequest("Select the competition and opponent.");
+    const playerIds = uniquePlayerIds(body.playerIds);
+    if (playerIds.length < 1 || playerIds.length > 18) return badRequest("Select between 1 and 18 players for the match squad.");
     const [clientClub, competition, opponent] = await Promise.all([
       prisma.club.findFirst({ where: { workspaceId: workspace.id, isClientClub: true } }),
       prisma.competition.findFirst({ where: { id: body.competitionId, workspaceId: workspace.id } }),
@@ -21,7 +24,25 @@ export async function POST(request: Request) {
     ]);
     if (!clientClub) return badRequest("Set up the client team first.");
     if (!competition || !opponent) return badRequest("The selected competition or opponent is invalid.");
-    const match = await prisma.match.create({ data: { matchDate: body.matchDate ? new Date(body.matchDate) : null, roundName: body.roundName?.trim() || null, venue: body.venue?.trim() || null, notes: body.notes?.trim() || null, clubId: clientClub.id, opponentClubId: opponent.id, competitionId: competition.id, workspaceId: workspace.id } });
+    const validCount = await prisma.player.count({ where: { id: { in: playerIds }, workspaceId: workspace.id, clubId: clientClub.id, active: true } });
+    if (validCount !== playerIds.length) return badRequest("One or more selected players are invalid.");
+    const match = await prisma.match.create({ data: {
+      matchDate: body.matchDate ? new Date(body.matchDate) : null,
+      roundName: body.roundName?.trim() || null,
+      venue: body.venue?.trim() || null,
+      notes: body.notes?.trim() || null,
+      firstHalfAttacksRight: body.firstHalfAttacksRight !== false,
+      clubId: clientClub.id,
+      opponentClubId: opponent.id,
+      competitionId: competition.id,
+      workspaceId: workspace.id,
+      squad: { create: playerIds.map((playerId, sortOrder) => ({ playerId, sortOrder })) },
+    } });
     return ok(match, 201);
   } catch (error) { return serverError(error); }
+}
+
+function uniquePlayerIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((item): item is string => typeof item === "string" && item.length > 0))];
 }

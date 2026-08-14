@@ -112,34 +112,54 @@ model Player {
   club         Club           @relation(fields: [clubId], references: [id], onDelete: Cascade)
   workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   actions      PlayerAction[]
+  matchSquads  MatchSquad[]
 
   @@index([clubId])
   @@index([workspaceId])
 }
 
 model Match {
-  id             String         @id @default(cuid())
-  matchDate      DateTime?
-  roundName      String?
-  venue          String?
-  notes          String?
-  clubId         String
-  opponentClubId String
-  competitionId  String
-  workspaceId    String
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  club           Club           @relation("AnalyzedClub", fields: [clubId], references: [id], onDelete: Restrict)
-  opponentClub   Club           @relation("OpponentClub", fields: [opponentClubId], references: [id], onDelete: Restrict)
-  competition    Competition    @relation(fields: [competitionId], references: [id], onDelete: Restrict)
-  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  video          Video?
-  playerActions  PlayerAction[]
+  id                     String         @id @default(cuid())
+  matchDate              DateTime?
+  roundName              String?
+  venue                  String?
+  notes                  String?
+  clubId                 String
+  opponentClubId         String
+  competitionId          String
+  workspaceId            String
+  firstHalfAttacksRight  Boolean        @default(true)
+  firstHalfStartSeconds  Float?
+  firstHalfEndSeconds    Float?
+  secondHalfStartSeconds Float?
+  secondHalfEndSeconds   Float?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  club                   Club           @relation("AnalyzedClub", fields: [clubId], references: [id], onDelete: Restrict)
+  opponentClub           Club           @relation("OpponentClub", fields: [opponentClubId], references: [id], onDelete: Restrict)
+  competition            Competition    @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  workspace              Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  video                  Video?
+  playerActions          PlayerAction[]
+  squad                  MatchSquad[]
 
   @@index([workspaceId])
   @@index([clubId])
   @@index([opponentClubId])
   @@index([competitionId])
+}
+
+model MatchSquad {
+  matchId   String
+  playerId  String
+  sortOrder Int
+  createdAt DateTime @default(now())
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@id([matchId, playerId])
+  @@unique([matchId, sortOrder])
+  @@index([playerId])
 }
 
 model Video {
@@ -156,7 +176,7 @@ model Video {
 }
 
 model PlayerAction {
-  id               String   @id @default(cuid())
+  id               String            @id @default(cuid())
   matchId          String
   playerId         String
   actionKey        String
@@ -164,16 +184,36 @@ model PlayerAction {
   eventTimeSeconds Float
   startTimeSeconds Float
   endTimeSeconds   Float
+  period           Int?
   fieldX           Float?
   fieldY           Float?
   notes            String?
   outcome          String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  match            Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  player           Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  match            Match             @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player           Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  subActions       PlayerSubAction[]
 
   @@index([matchId])
   @@index([playerId])
+  @@index([actionKey])
+}
+
+model PlayerSubAction {
+  id               String       @id @default(cuid())
+  playerActionId   String
+  actionKey        String
+  actionName       String
+  eventTimeSeconds Float
+  fieldX           Float?
+  fieldY           Float?
+  notes            String?
+  outcome          String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  playerAction     PlayerAction @relation(fields: [playerActionId], references: [id], onDelete: Cascade)
+
+  @@index([playerActionId])
   @@index([actionKey])
 }
