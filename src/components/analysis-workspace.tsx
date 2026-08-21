@@ -254,18 +254,23 @@ function PlayerRail({ squad, taggingPlayerIds, recentPlayerId, onTag, onReorder,
   const layout: PlayerLayout = squad.map((item, index) => ({ playerId: item.playerId, group: item.lineupGroup || (index >= 11 ? "substitutes" : playerPositionGroup(item.player)) }));
   const playerById = new Map(squad.map((item) => [item.playerId, item.player]));
 
+  function finishDrag() {
+    setDropGroup(null);
+    setDraggingId(null);
+    window.setTimeout(() => { suppressClick.current = false; }, 100);
+  }
+
   function movePlayer(group: LineupGroup, beforePlayerId?: string) {
     if (!draggingId) return;
-    if (beforePlayerId === draggingId) { setDropGroup(null); setDraggingId(null); return; }
+    if (beforePlayerId === draggingId) { finishDrag(); return; }
     const buckets = new Map<LineupGroup, PlayerLayout>(playerGroups.map((item) => [item.key, []]));
     const dragged = layout.find((item) => item.playerId === draggingId);
-    if (!dragged) return;
+    if (!dragged) { finishDrag(); return; }
     layout.filter((item) => item.playerId !== draggingId).forEach((item) => buckets.get(item.group)?.push(item));
     const target = buckets.get(group)!;
     const insertAt = beforePlayerId ? target.findIndex((item) => item.playerId === beforePlayerId) : -1;
     target.splice(insertAt < 0 ? target.length : insertAt, 0, { playerId: draggingId, group });
-    setDropGroup(null);
-    setDraggingId(null);
+    finishDrag();
     onReorder(playerGroups.flatMap((item) => buckets.get(item.key) || []));
   }
   const grouped = new Map<LineupGroup, PlayerRecord[]>(playerGroups.map((group) => [group.key, []]));
@@ -280,7 +285,7 @@ function PlayerRail({ squad, taggingPlayerIds, recentPlayerId, onTag, onReorder,
       {playerGroups.map((group, groupIndex) => <div key={group.key} className="flex shrink-0 items-center">
         <div className={`rounded-md px-1.5 py-0.5 transition ${dropGroup === group.key ? "ring-1 ring-white/30" : ""}`} style={dropGroup === group.key ? { backgroundColor: group.surface } : undefined} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropGroup(group.key); }} onDrop={(event) => { event.preventDefault(); movePlayer(group.key); }}>
           <p className="mb-1 text-[8px] font-bold uppercase tracking-[.14em]" style={{ color: group.color }}>{group.label}</p>
-          <div className="flex min-h-12 min-w-10 gap-1.5">{grouped.get(group.key)?.length ? grouped.get(group.key)?.map((player) => <button key={player.id} data-player-id={player.id} draggable type="button" title={`${player.shirtNumber ? `${player.shirtNumber} · ` : ""}${player.name} · ${playerPositionLabel(player.position)} · Drag to another group or position`} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; setDraggingId(player.id); suppressClick.current = true; }} onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); setDropGroup(group.key); }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); movePlayer(group.key, player.id); }} onDragEnd={() => { setDraggingId(null); setDropGroup(null); window.setTimeout(() => { suppressClick.current = false; }, 100); }} onClick={() => { if (!suppressClick.current) void onTag(player); }} className={`group relative flex h-12 w-12 shrink-0 cursor-grab items-center justify-center overflow-hidden rounded-md border bg-cover bg-center transition active:cursor-grabbing ${draggingId === player.id ? "opacity-40" : ""} ${recentPlayerId === player.id ? "ring-2 ring-emerald-300/60" : "hover:brightness-125"}`} style={{ borderColor: recentPlayerId === player.id ? "#6ee7b7" : `${group.color}80`, backgroundColor: group.surface, ...(player.photoUrl ? { backgroundImage: `url(${player.photoUrl})` } : {}) }}>{!player.photoUrl ? <UserRound size={18} style={{ color: group.color }}/> : null}<GripVertical size={10} className="absolute right-0 top-0 rounded-bl bg-black/70 text-white/80"/>{taggingPlayerIds.includes(player.id) ? <span className="absolute inset-0 flex items-center justify-center bg-black/60"><Loader2 size={15} className="animate-spin text-cyan-200"/></span> : null}</button>) : <span className="pointer-events-none flex h-12 w-10 items-center justify-center rounded border border-dashed text-[8px]" style={{ borderColor: `${group.color}45`, color: `${group.color}90` }}>Drop</span>}</div>
+          <div className="flex min-h-12 min-w-10 gap-1.5">{grouped.get(group.key)?.length ? grouped.get(group.key)?.map((player) => <button key={player.id} data-player-id={player.id} draggable type="button" title={`${player.shirtNumber ? `${player.shirtNumber} · ` : ""}${player.name} · ${playerPositionLabel(player.position)} · Click to record · Drag to move`} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; setDraggingId(player.id); suppressClick.current = true; }} onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); setDropGroup(group.key); }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); movePlayer(group.key, player.id); }} onDragEnd={finishDrag} onClick={() => { if (!suppressClick.current) void onTag(player); }} className={`group relative flex h-12 w-12 shrink-0 cursor-grab items-center justify-center overflow-hidden rounded-md border bg-cover bg-center transition active:cursor-grabbing ${draggingId === player.id ? "opacity-40" : ""} ${recentPlayerId === player.id ? "ring-2 ring-emerald-300/60" : "hover:brightness-125"}`} style={{ borderColor: recentPlayerId === player.id ? "#6ee7b7" : `${group.color}80`, backgroundColor: group.surface, ...(player.photoUrl ? { backgroundImage: `url(${player.photoUrl})` } : {}) }}>{!player.photoUrl ? <UserRound size={18} style={{ color: group.color }}/> : null}<GripVertical size={10} className="absolute right-0 top-0 rounded-bl bg-black/70 text-white/80"/>{taggingPlayerIds.includes(player.id) ? <span className="absolute inset-0 flex items-center justify-center bg-black/60"><Loader2 size={15} className="animate-spin text-cyan-200"/></span> : null}</button>) : <span className="pointer-events-none flex h-12 w-10 items-center justify-center rounded border border-dashed text-[8px]" style={{ borderColor: `${group.color}45`, color: `${group.color}90` }}>Drop</span>}</div>
         </div>
         {groupIndex < playerGroups.length - 1 ? <span className="h-[70%] w-px shrink-0" style={{ backgroundColor: `${group.color}80` }}/>: null}
       </div>)}
