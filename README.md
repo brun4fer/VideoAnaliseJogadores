@@ -51,4 +51,18 @@ Os vídeos antigos continuam associados aos jogos como registos locais. Ao abrir
 
 ## Fotografias
 
-As fotografias de jogadores e os emblemas ainda são registados através de URLs externas. A camada R2 criada para os vídeos pode ser reutilizada posteriormente para uploads de imagens, mas esse fluxo não faz parte da primeira migração de vídeo.
+As fotografias de jogadores e os emblemas de clubes são enviados diretamente do browser para o mesmo bucket privado do R2. A base de dados guarda a chave do objeto, nome original, tamanho, tipo MIME, ETag e data de upload; os bytes da imagem permanecem no R2.
+
+- Formatos permitidos: JPEG, PNG, WebP, AVIF e GIF.
+- Tamanho máximo: 10 MB por imagem.
+- Estrutura no bucket: `users/{userId}/images/clubs/{clubId}/...` e `users/{userId}/images/players/{playerId}/...`.
+- A aplicação serve as imagens através de rotas autenticadas e URLs R2 temporárias; o bucket continua sem acesso público.
+- URLs antigas permanecem visíveis como fallback até a imagem ser substituída por um ficheiro no ecrã `Structure`.
+
+Depois de publicar esta versão e aplicar as migrações, as imagens externas existentes podem ser copiadas automaticamente para o R2 com:
+
+```bash
+npm run images:migrate
+```
+
+O comando valida o conteúdo real de cada imagem, mantém um limite de 10 MB e preserva a URL anterior quando uma cópia falha. Deve ser executado apenas depois de o novo deployment estar `Ready`, porque atualiza as URLs da base de dados para as novas rotas privadas da aplicação.

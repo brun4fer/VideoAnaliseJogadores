@@ -163,3 +163,16 @@ export async function deleteR2Object(key: string) {
 export function createPlaybackUrl(key: string) {
   return { url: presignedUrl("GET", key, [], 12 * 60 * 60), expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString() };
 }
+
+export function createObjectUploadUrl(key: string) {
+  return { url: presignedUrl("PUT", key, [], 15 * 60), expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString() };
+}
+
+export async function headR2Object(key: string) {
+  const response = await signedRequest("HEAD", key);
+  return {
+    contentLength: Number(response.headers.get("content-length") || 0),
+    contentType: response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() || null,
+    etag: response.headers.get("etag"),
+  };
+}

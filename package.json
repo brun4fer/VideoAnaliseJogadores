@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "images:migrate": "node --env-file=.env --experimental-strip-types scripts/migrate-images-to-r2.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

@@ -84,6 +84,12 @@ model Club {
   name            String
   shortName       String?
   badgeUrl        String?
+  badgeStorageKey String?       @unique
+  badgeFileName   String?
+  badgeFileSize   Int?
+  badgeMimeType   String?
+  badgeEtag       String?
+  badgeUploadedAt DateTime?
   isClientClub    Boolean       @default(false)
   workspaceId     String
   createdAt       DateTime      @default(now())
@@ -99,21 +105,27 @@ model Club {
 }
 
 model Player {
-  id           String         @id @default(cuid())
-  name         String
-  shirtNumber  Int?
-  photoUrl     String?
-  position     String?
-  isGoalkeeper Boolean        @default(false)
-  active       Boolean        @default(true)
-  clubId       String
-  workspaceId  String
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  club         Club           @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  actions      PlayerAction[]
-  matchSquads  MatchSquad[]
+  id              String         @id @default(cuid())
+  name            String
+  shirtNumber     Int?
+  photoUrl        String?
+  photoStorageKey String?        @unique
+  photoFileName   String?
+  photoFileSize   Int?
+  photoMimeType   String?
+  photoEtag       String?
+  photoUploadedAt DateTime?
+  position        String?
+  isGoalkeeper    Boolean        @default(false)
+  active          Boolean        @default(true)
+  clubId          String
+  workspaceId     String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  club            Club           @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actions         PlayerAction[]
+  matchSquads     MatchSquad[]
 
   @@index([clubId])
   @@index([workspaceId])

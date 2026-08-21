@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     if (body.kind === "clientClub") {
       if (!body.name?.trim()) return badRequest("Enter the client team name.");
       const existing = await prisma.club.findFirst({ where: { workspaceId: workspace.id, isClientClub: true } });
-      const data = { name: body.name.trim(), shortName: body.shortName?.trim() || null, badgeUrl: body.badgeUrl?.trim() || null };
+      const data = { name: body.name.trim(), shortName: body.shortName?.trim() || null };
       if (existing) return ok(await prisma.club.update({ where: { id: existing.id }, data }));
       const competitions = await prisma.competition.findMany({ where: { workspaceId: workspace.id }, select: { id: true } });
       return ok(await prisma.club.create({ data: { ...data, isClientClub: true, workspaceId: workspace.id, competitions: { connect: competitions } } }), 201);
@@ -44,14 +44,14 @@ export async function POST(request: Request) {
       const existing = await prisma.club.findFirst({ where: { workspaceId: workspace.id, name } });
       if (existing?.isClientClub) return badRequest("The client team cannot be registered as an opponent.");
       if (existing) return ok(await prisma.club.update({ where: { id: existing.id }, data: { competitions: { connect: { id: competition.id } } } }));
-      return ok(await prisma.club.create({ data: { name, shortName: body.shortName?.trim() || null, badgeUrl: body.badgeUrl?.trim() || null, workspaceId: workspace.id, isClientClub: false, competitions: { connect: { id: competition.id } } } }), 201);
+      return ok(await prisma.club.create({ data: { name, shortName: body.shortName?.trim() || null, workspaceId: workspace.id, isClientClub: false, competitions: { connect: { id: competition.id } } } }), 201);
     }
     if (body.kind === "player") {
       if (!body.name?.trim()) return badRequest("Enter the player name.");
       const clientClub = await prisma.club.findFirst({ where: { workspaceId: workspace.id, isClientClub: true } });
       if (!clientClub) return badRequest("Set up the client team first.");
       const shirtNumber = body.shirtNumber === "" || body.shirtNumber == null ? null : Number(body.shirtNumber);
-      return ok(await prisma.player.create({ data: { name: body.name.trim(), shirtNumber, photoUrl: body.photoUrl?.trim() || null, position: body.position?.trim() || null, isGoalkeeper: Boolean(body.isGoalkeeper), clubId: clientClub.id, workspaceId: workspace.id } }), 201);
+      return ok(await prisma.player.create({ data: { name: body.name.trim(), shirtNumber, position: body.position?.trim() || null, isGoalkeeper: Boolean(body.isGoalkeeper), clubId: clientClub.id, workspaceId: workspace.id } }), 201);
     }
     return badRequest("Invalid record type.");
   } catch (error) { return serverError(error); }
