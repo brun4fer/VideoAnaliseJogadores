@@ -34,7 +34,11 @@ function objectPath(bucket: string, key: string) {
 
 function canonicalQuery(entries: QueryEntry[]) {
   return entries.map(([key, value]) => [encode(key), encode(value)] as const)
-    .sort(([aKey, aValue], [bKey, bValue]) => aKey.localeCompare(bKey) || aValue.localeCompare(bValue))
+    .sort(([aKey, aValue], [bKey, bValue]) => {
+      if (aKey !== bKey) return aKey < bKey ? -1 : 1;
+      if (aValue !== bValue) return aValue < bValue ? -1 : 1;
+      return 0;
+    })
     .map(([key, value]) => `${key}=${value}`).join("&");
 }
 
