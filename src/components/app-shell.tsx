@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { BarChart3, Home, LogOut, Map, Plus, UsersRound } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { apiFetch } from "@/lib/http";
+import { PwaInstallButton } from "@/components/pwa-install-button";
 
 const links = [
   { href: "/", label: "Matches", icon: Home },
@@ -43,7 +44,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return <Link key={href} href={href} className={cn("inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-sm text-slate-300 transition hover:bg-white/[.08] hover:text-white", active && "bg-cyan-300/10 text-cyan-100 ring-1 ring-cyan-300/20")}><Icon size={16} /><span className="hidden sm:inline">{label}</span></Link>;
           })}
-        </nav><button type="button" aria-label="Sign out" onClick={() => void logout()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-white/[.08] hover:text-white"><LogOut size={16}/></button></div>
+        </nav><PwaInstallButton/><button type="button" aria-label="Sign out" onClick={() => void logout()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-white/[.08] hover:text-white"><LogOut size={16}/></button></div>
       </div>
     </header>
     <main className="mx-auto max-w-[1800px] px-2 py-3 sm:px-4">{children}</main>

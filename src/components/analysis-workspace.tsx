@@ -230,8 +230,8 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
       <RecordedOccurrences actions={filtered} players={players} match={match} currentTime={currentTime} currentPeriod={currentPeriod} sourceUrl={sourceUrl} sideStyle={sideStyle} filterPlayerId={filterPlayerId} exporting={exporting} onFilter={setFilterPlayerId} onPreview={preview} onDelete={removeAction} onExport={() => void exportActions(filtered)} onSeek={seekTo} onSetPeriodMarker={setPeriodMarker}/>
     </div>
 
-    <Timeline players={players} actions={filtered} duration={timelineDuration} onSelect={preview}/>
     <Panel className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between"><div><Label>Identification</Label><h2 className="mt-1 text-sm font-bold text-white">Subactions</h2><p className="mt-1 text-xs text-slate-500">After recording the players, identify every occurrence in the dedicated workspace.</p></div><Button variant="primary" disabled={!match.playerActions.length} onClick={() => router.push(`/analysis/${matchId}/subactions`)}><Tags size={15}/>Identify subactions</Button></Panel>
+    <Timeline players={players} actions={filtered} duration={timelineDuration} onSelect={preview}/>
 
     {showIdentifyPrompt ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"><Panel className="w-full max-w-md p-5"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-300/10 text-cyan-300"><Tags size={20}/></div><h2 className="mt-4 text-lg font-bold text-white">The video has finished</h2><p className="mt-2 text-sm text-slate-400">Do you want to identify the recorded subactions now?</p><div className="mt-5 flex justify-end gap-2"><Button onClick={() => setShowIdentifyPrompt(false)}>Not now</Button><Button variant="primary" onClick={() => router.push(`/analysis/${matchId}/subactions`)}><Tags size={15}/>Identify subactions</Button></div></Panel></div> : null}
   </div>;
