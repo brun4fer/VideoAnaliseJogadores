@@ -1,3 +1,5 @@
+import type { PlayerPositionGroup } from "@/lib/player-positions";
+
 export type PlayerRecord = {
   id: string; name: string; shirtNumber: number | null; photoUrl: string | null;
   position: string | null; isGoalkeeper: boolean; active: boolean; clubId: string;
@@ -23,7 +25,7 @@ export type MatchDetail = {
   secondHalfStartSeconds: number | null; secondHalfEndSeconds: number | null;
   venue: string | null; notes: string | null; clubId: string; opponentClubId: string; competitionId: string;
   club: { id: string; name: string; players: PlayerRecord[] };
-  squad: Array<{ playerId: string; sortOrder: number; player: PlayerRecord }>;
+  squad: Array<{ playerId: string; sortOrder: number; lineupGroup: PlayerPositionGroup | "substitutes" | null; player: PlayerRecord }>;
   opponentClub: { id: string; name: string };
   competition: { id: string; name: string; season: { id: string; name: string } };
   video: { fileName: string; fileSize: string; durationSeconds: number; mimeType: string; storageStatus: "LOCAL" | "UPLOADING" | "READY" | "FAILED"; uploadedAt: string | null } | null;

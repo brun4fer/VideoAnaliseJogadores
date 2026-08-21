@@ -15,6 +15,9 @@ const matchInclude = {
   playerActions: { orderBy: { eventTimeSeconds: "asc" as const }, include: { player: true, subActions: { orderBy: { eventTimeSeconds: "asc" as const } } } },
 };
 
+const lineupGroups = ["goalkeepers", "defenders", "midfielders", "forwards", "substitutes"] as const;
+type LineupGroup = typeof lineupGroups[number];
+
 export async function GET(_: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
     const { workspace } = await requireManagementAccount();
@@ -22,7 +25,7 @@ export async function GET(_: Request, context: { params: Promise<{ matchId: stri
     const match = await prisma.match.findFirst({ where: { id: matchId, workspaceId: workspace.id }, include: matchInclude });
     if (!match) return notFound("Match not found.");
     const fallbackPlayers = sortPlayersByPosition(match.club.players).slice(0, 18);
-    const squad = match.squad.length ? match.squad : fallbackPlayers.map((player, sortOrder) => ({ matchId, playerId: player.id, sortOrder, createdAt: match.createdAt, player }));
+    const squad = match.squad.length ? match.squad : fallbackPlayers.map((player, sortOrder) => ({ matchId, playerId: player.id, sortOrder, lineupGroup: null, createdAt: match.createdAt, player }));
     return ok({ ...match, squad, matchDate: match.matchDate?.toISOString() || null, video: match.video ? serializeVideo(match.video) : null });
   } catch (error) { return serverError(error); }
 }
@@ -38,7 +41,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ match
     const opponentClubId = body.opponentClubId || existing.opponentClubId;
     const opponent = await prisma.club.findFirst({ where: { id: opponentClubId, workspaceId: workspace.id, isClientClub: false, competitions: { some: { id: competitionId } } } });
     if (!opponent) return notFound("The selected opponent is not available in this competition.");
-    const playerIds = body.playerIds === undefined ? null : uniquePlayerIds(body.playerIds);
+    const playerLayout = readPlayerLayout(body.playerLayout);
+    if (body.playerLayout !== undefined && !playerLayout) return badRequest("Invalid player group layout.");
+    const playerIds = body.playerIds === undefined ? playerLayout?.map((item) => item.playerId) || null : uniquePlayerIds(body.playerIds);
     if (playerIds && (playerIds.length < 1 || playerIds.length > 18)) return badRequest("Select between 1 and 18 players.");
     if (playerIds) {
       const validCount = await prisma.player.count({ where: { id: { in: playerIds }, workspaceId: workspace.id, clubId: existing.clubId, active: true } });
@@ -66,7 +71,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ match
       } });
       if (playerIds) {
         await transaction.matchSquad.deleteMany({ where: { matchId } });
-        await transaction.matchSquad.createMany({ data: playerIds.map((playerId, sortOrder) => ({ matchId, playerId, sortOrder })) });
+        const groupByPlayer = new Map(playerLayout?.map((item) => [item.playerId, item.group]));
+        await transaction.matchSquad.createMany({ data: playerIds.map((playerId, sortOrder) => ({ matchId, playerId, sortOrder, lineupGroup: groupByPlayer.get(playerId) || null })) });
       }
       if (Object.keys(markerData).length) {
         await transaction.playerAction.updateMany({ where: { matchId }, data: { period: null } });
@@ -102,4 +108,16 @@ export async function DELETE(_: Request, context: { params: Promise<{ matchId: s
 function uniquePlayerIds(value: unknown) {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.filter((item): item is string => typeof item === "string" && item.length > 0))];
+}
+
+function readPlayerLayout(value: unknown): Array<{ playerId: string; group: LineupGroup }> | null {
+  if (value === undefined) return null;
+  if (!Array.isArray(value)) return null;
+  const layout = value.map((item) => ({
+    playerId: typeof item?.playerId === "string" ? item.playerId : "",
+    group: item?.group as LineupGroup,
+  }));
+  if (layout.some((item) => !item.playerId || !lineupGroups.includes(item.group))) return null;
+  if (new Set(layout.map((item) => item.playerId)).size !== layout.length) return null;
+  return layout;
 }

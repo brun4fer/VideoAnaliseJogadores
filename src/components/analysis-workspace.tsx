@@ -125,14 +125,14 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
     finally { setTaggingPlayerIds((current) => current.filter((id) => id !== player.id)); }
   }
 
-  async function reorderPlayers(playerIds: string[]) {
+  async function savePlayerLayout(playerLayout: Array<{ playerId: string; group: PlayerPositionGroup | "substitutes" }>) {
     if (!match) return;
     const previous = match;
     const byId = new Map(match.squad.map((item) => [item.playerId, item]));
-    setMatch({ ...match, squad: playerIds.map((playerId, sortOrder) => ({ ...byId.get(playerId)!, sortOrder })) });
+    setMatch({ ...match, squad: playerLayout.map(({ playerId, group }, sortOrder) => ({ ...byId.get(playerId)!, sortOrder, lineupGroup: group })) });
     try {
-      setMatch(await apiFetch<MatchDetail>(`/api/matches/${matchId}`, { method: "PATCH", body: JSON.stringify({ playerIds }) }));
-      setNotice("Player photo order saved for this match.");
+      setMatch(await apiFetch<MatchDetail>(`/api/matches/${matchId}`, { method: "PATCH", body: JSON.stringify({ playerLayout }) }));
+      setNotice("Player groups and order saved for this match.");
     } catch (error) {
       setMatch(previous);
       setNotice(error instanceof Error ? error.message : "Could not save the player order.");
@@ -223,7 +223,7 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
     <input ref={fileRef} type="file" accept="video/*" className="hidden" onChange={(event) => void chooseVideo(event.target.files?.[0])}/>
     {notice || exporting ? <div role="status" className="fixed bottom-3 right-3 z-50 flex max-w-sm gap-3 rounded-lg border border-cyan-300/25 bg-pitch-950/95 px-3 py-2 text-xs text-cyan-100 shadow-2xl"><span>{exporting ? exportStatus : notice}</span>{!exporting ? <button onClick={() => setNotice(null)}><X size={14}/></button> : null}</div> : null}
 
-    <PlayerRail players={players} taggingPlayerIds={taggingPlayerIds} recentPlayerId={recentPlayerId} onTag={tagPlayer} onReorder={reorderPlayers} videoControl={<Button size="sm" variant={uploading ? "danger" : "secondary"} onClick={() => uploading ? uploadAbort.current?.abort() : fileRef.current?.click()}>{uploading ? <Loader2 size={14} className="animate-spin"/> : <Upload size={14}/>} {uploading ? `Cancel · ${Math.round(uploadProgress * 100)}%` : match.video?.storageStatus === "READY" ? "Replace video" : match.video ? "Upload video" : "Select video"}</Button>}/>
+    <PlayerRail squad={match.squad} taggingPlayerIds={taggingPlayerIds} recentPlayerId={recentPlayerId} onTag={tagPlayer} onReorder={savePlayerLayout} videoControl={<Button size="sm" variant={uploading ? "danger" : "secondary"} onClick={() => uploading ? uploadAbort.current?.abort() : fileRef.current?.click()}>{uploading ? <Loader2 size={14} className="animate-spin"/> : <Upload size={14}/>} {uploading ? `Cancel · ${Math.round(uploadProgress * 100)}%` : match.video?.storageStatus === "READY" ? "Replace video" : match.video ? "Upload video" : "Select video"}</Button>}/>
     <div className="grid items-start gap-2 xl:grid-cols-[minmax(0,1fr)_19rem]">
       <div ref={videoPanelRef} className="min-w-0"><VideoPanel sourceUrl={sourceUrl} videoRef={videoRef} duration={duration} currentTime={currentTime} rate={rate} playing={playing} previewEnd={previewEnd} lastAction={lastAction} match={match} currentPeriod={currentPeriod} setDuration={setDuration} setCurrentTime={setCurrentTime} setPlaying={setPlaying} setPreviewEnd={setPreviewEnd} setRate={setRate} seekTo={seekTo} onChoose={() => fileRef.current?.click()} onDeleteLast={() => void removeLastAction(lastAction)} onSetPeriodMarker={setPeriodMarker} onEnded={() => { if (previewEnd === null && match.playerActions.length) setShowIdentifyPrompt(true); }}/></div>
       <RecordedOccurrences actions={filtered} players={players} sideStyle={sideStyle} filterPlayerId={filterPlayerId} exporting={exporting} onFilter={setFilterPlayerId} onPreview={preview} onDelete={removeAction} onExport={() => void exportActions(filtered)}/>
@@ -236,7 +236,10 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
   </div>;
 }
 
-const playerGroups: Array<{ key: PlayerPositionGroup | "substitutes"; label: string; color: string; surface: string }> = [
+type LineupGroup = PlayerPositionGroup | "substitutes";
+type PlayerLayout = Array<{ playerId: string; group: LineupGroup }>;
+
+const playerGroups: Array<{ key: LineupGroup; label: string; color: string; surface: string }> = [
   { key: "goalkeepers", label: "Goalkeepers", color: "#a78bfa", surface: "rgba(167,139,250,.12)" },
   { key: "defenders", label: "Defenders", color: "#60a5fa", surface: "rgba(96,165,250,.12)" },
   { key: "midfielders", label: "Midfielders", color: "#34d399", surface: "rgba(52,211,153,.12)" },
@@ -244,21 +247,29 @@ const playerGroups: Array<{ key: PlayerPositionGroup | "substitutes"; label: str
   { key: "substitutes", label: "Substitutes", color: "#b7791f", surface: "rgba(183,121,31,.14)" },
 ];
 
-function PlayerRail({ players, taggingPlayerIds, recentPlayerId, onTag, onReorder, videoControl }: { players: PlayerRecord[]; taggingPlayerIds: string[]; recentPlayerId: string | null; onTag: (player: PlayerRecord) => void; onReorder: (playerIds: string[]) => void; videoControl: React.ReactNode }) {
+function PlayerRail({ squad, taggingPlayerIds, recentPlayerId, onTag, onReorder, videoControl }: { squad: MatchDetail["squad"]; taggingPlayerIds: string[]; recentPlayerId: string | null; onTag: (player: PlayerRecord) => void; onReorder: (layout: PlayerLayout) => void; videoControl: React.ReactNode }) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropGroup, setDropGroup] = useState<LineupGroup | null>(null);
   const suppressClick = useRef(false);
-  function swap(targetId: string) {
-    if (!draggingId || draggingId === targetId) return;
-    const ids = players.map((player) => player.id);
-    const from = ids.indexOf(draggingId);
-    const to = ids.indexOf(targetId);
-    [ids[from], ids[to]] = [ids[to], ids[from]];
-    onReorder(ids);
+  const layout: PlayerLayout = squad.map((item, index) => ({ playerId: item.playerId, group: item.lineupGroup || (index >= 11 ? "substitutes" : playerPositionGroup(item.player)) }));
+  const playerById = new Map(squad.map((item) => [item.playerId, item.player]));
+
+  function movePlayer(group: LineupGroup, beforePlayerId?: string) {
+    if (!draggingId) return;
+    if (beforePlayerId === draggingId) { setDropGroup(null); setDraggingId(null); return; }
+    const buckets = new Map<LineupGroup, PlayerLayout>(playerGroups.map((item) => [item.key, []]));
+    const dragged = layout.find((item) => item.playerId === draggingId);
+    if (!dragged) return;
+    layout.filter((item) => item.playerId !== draggingId).forEach((item) => buckets.get(item.group)?.push(item));
+    const target = buckets.get(group)!;
+    const insertAt = beforePlayerId ? target.findIndex((item) => item.playerId === beforePlayerId) : -1;
+    target.splice(insertAt < 0 ? target.length : insertAt, 0, { playerId: draggingId, group });
+    setDropGroup(null);
+    setDraggingId(null);
+    onReorder(playerGroups.flatMap((item) => buckets.get(item.key) || []));
   }
-  const starters = players.slice(0, 11);
-  const grouped = new Map<(typeof playerGroups)[number]["key"], PlayerRecord[]>(playerGroups.map((group) => [group.key, []]));
-  starters.forEach((player) => grouped.get(playerPositionGroup(player))?.push(player));
-  grouped.set("substitutes", players.slice(11));
+  const grouped = new Map<LineupGroup, PlayerRecord[]>(playerGroups.map((group) => [group.key, []]));
+  layout.forEach((item) => { const player = playerById.get(item.playerId); if (player) grouped.get(item.group)?.push(player); });
 
   return <Panel className="flex min-w-0 items-stretch overflow-hidden">
     <div className="flex shrink-0 flex-col justify-center border-r border-white/10 px-2.5 py-2">
@@ -267,9 +278,9 @@ function PlayerRail({ players, taggingPlayerIds, recentPlayerId, onTag, onReorde
     </div>
     <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto px-1 py-1.5">
       {playerGroups.map((group, groupIndex) => <div key={group.key} className="flex shrink-0 items-center">
-        <div className="px-1.5">
+        <div className={`rounded-md px-1.5 py-0.5 transition ${dropGroup === group.key ? "ring-1 ring-white/30" : ""}`} style={dropGroup === group.key ? { backgroundColor: group.surface } : undefined} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropGroup(group.key); }} onDrop={(event) => { event.preventDefault(); movePlayer(group.key); }}>
           <p className="mb-1 text-[8px] font-bold uppercase tracking-[.14em]" style={{ color: group.color }}>{group.label}</p>
-          <div className="flex min-h-12 gap-1.5">{grouped.get(group.key)?.length ? grouped.get(group.key)?.map((player) => <button key={player.id} data-player-id={player.id} draggable type="button" title={`${player.shirtNumber ? `${player.shirtNumber} · ` : ""}${player.name} · ${playerPositionLabel(player.position)} · Drag to reorder`} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; setDraggingId(player.id); suppressClick.current = true; }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); swap(player.id); setDraggingId(null); }} onDragEnd={() => { setDraggingId(null); window.setTimeout(() => { suppressClick.current = false; }, 100); }} onClick={() => { if (!suppressClick.current) void onTag(player); }} className={`group relative flex h-12 w-12 shrink-0 cursor-grab items-center justify-center overflow-hidden rounded-md border bg-cover bg-center transition active:cursor-grabbing ${draggingId === player.id ? "opacity-40" : ""} ${recentPlayerId === player.id ? "ring-2 ring-emerald-300/60" : "hover:brightness-125"}`} style={{ borderColor: recentPlayerId === player.id ? "#6ee7b7" : `${group.color}80`, backgroundColor: group.surface, ...(player.photoUrl ? { backgroundImage: `url(${player.photoUrl})` } : {}) }}>{!player.photoUrl ? <UserRound size={18} style={{ color: group.color }}/> : null}<GripVertical size={10} className="absolute right-0 top-0 rounded-bl bg-black/70 text-white/80"/>{taggingPlayerIds.includes(player.id) ? <span className="absolute inset-0 flex items-center justify-center bg-black/60"><Loader2 size={15} className="animate-spin text-cyan-200"/></span> : null}</button>) : <span className="flex h-12 w-10 items-center justify-center rounded border border-dashed text-[8px]" style={{ borderColor: `${group.color}45`, color: `${group.color}90` }}>—</span>}</div>
+          <div className="flex min-h-12 min-w-10 gap-1.5">{grouped.get(group.key)?.length ? grouped.get(group.key)?.map((player) => <button key={player.id} data-player-id={player.id} draggable type="button" title={`${player.shirtNumber ? `${player.shirtNumber} · ` : ""}${player.name} · ${playerPositionLabel(player.position)} · Drag to another group or position`} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; setDraggingId(player.id); suppressClick.current = true; }} onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); setDropGroup(group.key); }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); movePlayer(group.key, player.id); }} onDragEnd={() => { setDraggingId(null); setDropGroup(null); window.setTimeout(() => { suppressClick.current = false; }, 100); }} onClick={() => { if (!suppressClick.current) void onTag(player); }} className={`group relative flex h-12 w-12 shrink-0 cursor-grab items-center justify-center overflow-hidden rounded-md border bg-cover bg-center transition active:cursor-grabbing ${draggingId === player.id ? "opacity-40" : ""} ${recentPlayerId === player.id ? "ring-2 ring-emerald-300/60" : "hover:brightness-125"}`} style={{ borderColor: recentPlayerId === player.id ? "#6ee7b7" : `${group.color}80`, backgroundColor: group.surface, ...(player.photoUrl ? { backgroundImage: `url(${player.photoUrl})` } : {}) }}>{!player.photoUrl ? <UserRound size={18} style={{ color: group.color }}/> : null}<GripVertical size={10} className="absolute right-0 top-0 rounded-bl bg-black/70 text-white/80"/>{taggingPlayerIds.includes(player.id) ? <span className="absolute inset-0 flex items-center justify-center bg-black/60"><Loader2 size={15} className="animate-spin text-cyan-200"/></span> : null}</button>) : <span className="pointer-events-none flex h-12 w-10 items-center justify-center rounded border border-dashed text-[8px]" style={{ borderColor: `${group.color}45`, color: `${group.color}90` }}>Drop</span>}</div>
         </div>
         {groupIndex < playerGroups.length - 1 ? <span className="h-[70%] w-px shrink-0" style={{ backgroundColor: `${group.color}80` }}/>: null}
       </div>)}

@@ -165,12 +165,13 @@ model Match {
 }
 
 model MatchSquad {
-  matchId   String
-  playerId  String
-  sortOrder Int
-  createdAt DateTime @default(now())
-  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  matchId     String
+  playerId    String
+  sortOrder   Int
+  lineupGroup String?
+  createdAt   DateTime @default(now())
+  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@id([matchId, playerId])
   @@unique([matchId, sortOrder])
