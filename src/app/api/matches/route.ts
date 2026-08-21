@@ -1,12 +1,13 @@
 import { badRequest, ok, serverError } from "@/lib/api";
 import { requireAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { serializeVideo } from "@/lib/video";
 
 export async function GET() {
   try {
     const { workspace } = await requireAccount();
     const matches = await prisma.match.findMany({ where: { workspaceId: workspace.id }, orderBy: [{ matchDate: "desc" }, { createdAt: "desc" }], include: { club: true, opponentClub: true, competition: { include: { season: true } }, video: true, _count: { select: { playerActions: true, squad: true } } } });
-    return ok(matches.map(({ video, ...match }) => ({ ...match, video: video ? { ...video, fileSize: video.fileSize.toString() } : null }))) ;
+    return ok(matches.map(({ video, ...match }) => ({ ...match, video: video ? serializeVideo(video) : null }))) ;
   } catch (error) { return serverError(error); }
 }
 

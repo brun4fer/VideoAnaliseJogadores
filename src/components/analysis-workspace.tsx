@@ -14,6 +14,7 @@ import { apiFetch } from "@/lib/http";
 import { getRememberedMatchVideo, rememberMatchVideo } from "@/lib/local-video-store";
 import { getMatchPeriodAtTime, matchPeriodLabel, periodMarkers, type PeriodMarkerKey } from "@/lib/match-periods";
 import { playerPositionLabel } from "@/lib/player-positions";
+import { getRemoteVideoUrl, uploadMatchVideo } from "@/lib/remote-video-store";
 import { formatTime, roundTime } from "@/lib/time";
 
 export function AnalysisWorkspace({ matchId }: { matchId: string }) {
@@ -22,6 +23,7 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
   const videoPanelRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const flashTimer = useRef<number | null>(null);
+  const uploadAbort = useRef<AbortController | null>(null);
   const [match, setMatch] = useState<MatchDetail | null>(null);
   const [sourceUrl, setSourceUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
@@ -37,15 +39,26 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
   const [exportStatus, setExportStatus] = useState("");
   const [sideHeight, setSideHeight] = useState<number>();
   const [showIdentifyPrompt, setShowIdentifyPrompt] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const load = useCallback(async () => {
-    try { setMatch(await apiFetch<MatchDetail>(`/api/matches/${matchId}`)); }
+    try { const data = await apiFetch<MatchDetail>(`/api/matches/${matchId}`); setMatch(data); return data; }
     catch (error) { setNotice(error instanceof Error ? error.message : "Could not load the match."); }
   }, [matchId]);
 
   useEffect(() => {
-    void load();
-    getRememberedMatchVideo(matchId).then((file) => { if (file) setSourceUrl(URL.createObjectURL(file)); }).catch(() => undefined);
+    let active = true;
+    load().then(async (data) => {
+      if (!active) return;
+      if (data?.video?.storageStatus === "READY") {
+        const remote = await getRemoteVideoUrl(matchId).catch(() => null);
+        if (active && remote) { setSourceUrl(remote.url); setDuration(data.video!.durationSeconds); return; }
+      }
+      const file = await getRememberedMatchVideo(matchId).catch(() => null);
+      if (active && file) setSourceUrl(URL.createObjectURL(file));
+    });
+    return () => { active = false; };
   }, [load, matchId]);
 
   useEffect(() => () => {
@@ -69,14 +82,23 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
     const url = URL.createObjectURL(file);
     setSourceUrl(url);
     await rememberMatchVideo(matchId, file).catch(() => undefined);
-    const probe = document.createElement("video");
-    probe.preload = "metadata";
-    probe.src = url;
-    await new Promise<void>((resolve, reject) => { probe.onloadedmetadata = () => resolve(); probe.onerror = () => reject(new Error("Could not read the video.")); });
-    await apiFetch(`/api/matches/${matchId}/video`, { method: "PUT", body: JSON.stringify({ fileName: file.name, fileSize: file.size, durationSeconds: probe.duration, mimeType: file.type || "video/mp4", lastModified: new Date(file.lastModified).toISOString() }) });
-    setDuration(probe.duration);
-    await load();
-    setNotice("Video selected. The file remains on this device.");
+    setUploading(true);
+    setUploadProgress(0);
+    const controller = new AbortController();
+    uploadAbort.current = controller;
+    try {
+      const result = await uploadMatchVideo(matchId, file, ({ progress, detail }) => { setUploadProgress(progress); setNotice(`${detail} ${Math.round(progress * 100)}%`); }, controller.signal);
+      setDuration(result.durationSeconds);
+      const remote = await getRemoteVideoUrl(matchId);
+      setSourceUrl(remote.url);
+      await load();
+      setNotice(result.resumed ? "Video upload resumed and completed successfully." : "Video stored securely in Cloudflare R2.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "The video could not be uploaded.");
+    } finally {
+      if (uploadAbort.current === controller) uploadAbort.current = null;
+      setUploading(false);
+    }
   }
 
   function seekTo(seconds: number) {
@@ -150,8 +172,9 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
 
   async function exportActions(actions: ActionRecord[]) {
     if (!match || !actions.length || exporting) return;
-    const file = await getRememberedMatchVideo(match.id).catch(() => null);
-    if (!file) return setNotice("Select the local match video before exporting clips.");
+    const localFile = await getRememberedMatchVideo(match.id).catch(() => null);
+    const source = localFile || (match.video?.storageStatus === "READY" ? (await getRemoteVideoUrl(match.id).catch(() => null))?.url : null);
+    if (!source) return setNotice("Upload this match video before exporting clips.");
     let directory = null;
     try { directory = await pickExportDirectory(); }
     catch (error) { if (isExportPickerCancellation(error)) return; return setNotice(error instanceof Error ? error.message : "Could not open the export folder."); }
@@ -167,7 +190,7 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
         const folders = names.length ? names : ["Unclassified"];
         const label = names.join(" + ") || "Unclassified";
         setExportStatus(`Exporting ${index + 1} of ${actions.length}: ${action.player.name}`);
-        const result = await exportActionClip(file, { ...action, actionName: label }, matchName, (status) => setExportStatus(`${index + 1}/${actions.length} · ${status}`));
+        const result = await exportActionClip(source, { ...action, actionName: label }, matchName, (status) => setExportStatus(`${index + 1}/${actions.length} · ${status}`));
         const fileName = `${String(index + 1).padStart(3, "0")}-${result.fileName}`;
         const paths = folders.map((folder) => `${safe(action.player.name)}/${safe(folder)}/${fileName}`);
         for (const path of paths) {
@@ -198,7 +221,7 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
 
   return <div className="space-y-2 sm:space-y-3">
     <input ref={fileRef} type="file" accept="video/*" className="hidden" onChange={(event) => void chooseVideo(event.target.files?.[0])}/>
-    <header className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[.045] px-3 py-2"><div className="min-w-0"><Link href="/" className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-white"><ArrowLeft size={11}/>Matches</Link><h1 className="truncate text-lg font-bold text-white">{match.club.name} vs {match.opponentClub.name}</h1><p className="truncate text-xs text-slate-500">{match.competition.name}{match.roundName ? ` · ${match.roundName}` : ""}</p></div><Button size="sm" onClick={() => fileRef.current?.click()}><Upload size={14}/>{sourceUrl ? "Change video" : "Select video"}</Button></header>
+    <header className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[.045] px-3 py-2"><div className="min-w-0"><Link href="/" className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-white"><ArrowLeft size={11}/>Matches</Link><h1 className="truncate text-lg font-bold text-white">{match.club.name} vs {match.opponentClub.name}</h1><p className="truncate text-xs text-slate-500">{match.competition.name}{match.roundName ? ` · ${match.roundName}` : ""}</p></div><Button size="sm" variant={uploading ? "danger" : "secondary"} onClick={() => uploading ? uploadAbort.current?.abort() : fileRef.current?.click()}>{uploading ? <Loader2 size={14} className="animate-spin"/> : <Upload size={14}/>} {uploading ? `Cancel · ${Math.round(uploadProgress * 100)}%` : match.video?.storageStatus === "READY" ? "Replace video" : match.video ? "Upload existing video" : "Upload video"}</Button></header>
     {notice || exporting ? <div role="status" className="fixed bottom-3 right-3 z-50 flex max-w-sm gap-3 rounded-lg border border-cyan-300/25 bg-pitch-950/95 px-3 py-2 text-xs text-cyan-100 shadow-2xl"><span>{exporting ? exportStatus : notice}</span>{!exporting ? <button onClick={() => setNotice(null)}><X size={14}/></button> : null}</div> : null}
 
     <PlayerRail players={players} taggingPlayerIds={taggingPlayerIds} recentPlayerId={recentPlayerId} onTag={tagPlayer} onReorder={reorderPlayers}/>
@@ -229,7 +252,7 @@ function PlayerRail({ players, taggingPlayerIds, recentPlayerId, onTag, onReorde
 }
 
 function VideoPanel({ sourceUrl, videoRef, duration, currentTime, rate, playing, previewEnd, lastAction, setDuration, setCurrentTime, setPlaying, setPreviewEnd, setRate, seekTo, onChoose, onDeleteLast, onEnded }: { sourceUrl: string | null; videoRef: RefObject<HTMLVideoElement | null>; duration: number; currentTime: number; rate: number; playing: boolean; previewEnd: number | null; lastAction: ActionRecord | null; setDuration: (value: number) => void; setCurrentTime: (value: number) => void; setPlaying: (value: boolean) => void; setPreviewEnd: (value: number | null) => void; setRate: (value: number) => void; seekTo: (value: number) => void; onChoose: () => void; onDeleteLast: () => void; onEnded: () => void }) {
-  return <Panel className="overflow-hidden"><div className="relative aspect-video bg-black">{sourceUrl ? <video ref={videoRef} src={sourceUrl} className="h-full w-full" playsInline onLoadedMetadata={(event) => { setDuration(event.currentTarget.duration); event.currentTarget.playbackRate = rate; }} onTimeUpdate={(event) => { setCurrentTime(event.currentTarget.currentTime); if (previewEnd !== null && event.currentTarget.currentTime >= previewEnd - .04) { event.currentTarget.pause(); event.currentTarget.currentTime = previewEnd; setPreviewEnd(null); } }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={onEnded}/> : <button onClick={onChoose} className="flex h-full w-full flex-col items-center justify-center p-6 text-center"><FileVideo size={38} className="text-cyan-300"/><h2 className="mt-3 text-sm font-bold text-white">Select the local match video</h2><p className="mt-1 text-xs text-slate-500">The file remains on this device.</p></button>}</div><div className="border-t border-white/10 p-2"><input aria-label="Video position" type="range" min={0} max={duration || 0} step={.1} value={Math.min(currentTime, duration || 0)} disabled={!sourceUrl} onChange={(event) => seekTo(Number(event.target.value))} className="w-full accent-cyan-300"/><div className="mt-1.5 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1"><Button size="icon" className="h-8 w-8" disabled={!sourceUrl} onClick={() => seekTo(currentTime - 5)}><ChevronLeft size={15}/></Button><Button size="icon" className="h-8 w-8" variant="primary" disabled={!sourceUrl} onClick={() => { const video = videoRef.current; if (video?.paused) void video.play(); else video?.pause(); }}>{playing ? <Pause size={15}/> : <Play size={15}/>}</Button><Button size="icon" className="h-8 w-8" disabled={!sourceUrl} onClick={() => seekTo(currentTime + 5)}><ChevronRight size={15}/></Button><div className="flex overflow-hidden rounded-md border border-white/10">{[.5, 1, 2, 4].map((value) => <button key={value} type="button" onClick={() => { setRate(value); if (videoRef.current) videoRef.current.playbackRate = value; }} className={`h-8 px-2 text-[10px] ${rate === value ? "bg-cyan-300 text-slate-950" : "bg-white/[.04] text-slate-300"}`}>{value}×</button>)}</div><Button size="icon" variant="danger" className="h-8 w-8" disabled={!lastAction} title={lastAction ? `Delete last occurrence: ${lastAction.player.name} at ${formatTime(lastAction.eventTimeSeconds)}` : "No occurrence to delete"} aria-label="Delete last recorded occurrence" onClick={onDeleteLast}><Trash2 size={14}/></Button></div><span className="inline-flex items-center gap-1 font-mono text-xs text-white"><Clock3 size={13} className="text-cyan-300"/>{formatTime(currentTime)} / {formatTime(duration)}</span></div></div></Panel>;
+  return <Panel className="overflow-hidden"><div className="relative aspect-video bg-black">{sourceUrl ? <video ref={videoRef} src={sourceUrl} crossOrigin="anonymous" className="h-full w-full" playsInline onLoadedMetadata={(event) => { setDuration(event.currentTarget.duration); event.currentTarget.playbackRate = rate; }} onTimeUpdate={(event) => { setCurrentTime(event.currentTarget.currentTime); if (previewEnd !== null && event.currentTarget.currentTime >= previewEnd - .04) { event.currentTarget.pause(); event.currentTarget.currentTime = previewEnd; setPreviewEnd(null); } }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={onEnded}/> : <button onClick={onChoose} className="flex h-full w-full flex-col items-center justify-center p-6 text-center"><FileVideo size={38} className="text-cyan-300"/><h2 className="mt-3 text-sm font-bold text-white">Upload the match video</h2><p className="mt-1 text-xs text-slate-500">It will be stored privately in Cloudflare R2.</p></button>}</div><div className="border-t border-white/10 p-2"><input aria-label="Video position" type="range" min={0} max={duration || 0} step={.1} value={Math.min(currentTime, duration || 0)} disabled={!sourceUrl} onChange={(event) => seekTo(Number(event.target.value))} className="w-full accent-cyan-300"/><div className="mt-1.5 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1"><Button size="icon" className="h-8 w-8" disabled={!sourceUrl} onClick={() => seekTo(currentTime - 5)}><ChevronLeft size={15}/></Button><Button size="icon" className="h-8 w-8" variant="primary" disabled={!sourceUrl} onClick={() => { const video = videoRef.current; if (video?.paused) void video.play(); else video?.pause(); }}>{playing ? <Pause size={15}/> : <Play size={15}/>}</Button><Button size="icon" className="h-8 w-8" disabled={!sourceUrl} onClick={() => seekTo(currentTime + 5)}><ChevronRight size={15}/></Button><div className="flex overflow-hidden rounded-md border border-white/10">{[.5, 1, 2, 4].map((value) => <button key={value} type="button" onClick={() => { setRate(value); if (videoRef.current) videoRef.current.playbackRate = value; }} className={`h-8 px-2 text-[10px] ${rate === value ? "bg-cyan-300 text-slate-950" : "bg-white/[.04] text-slate-300"}`}>{value}×</button>)}</div><Button size="icon" variant="danger" className="h-8 w-8" disabled={!lastAction} title={lastAction ? `Delete last occurrence: ${lastAction.player.name} at ${formatTime(lastAction.eventTimeSeconds)}` : "No occurrence to delete"} aria-label="Delete last recorded occurrence" onClick={onDeleteLast}><Trash2 size={14}/></Button></div><span className="inline-flex items-center gap-1 font-mono text-xs text-white"><Clock3 size={13} className="text-cyan-300"/>{formatTime(currentTime)} / {formatTime(duration)}</span></div></div></Panel>;
 }
 
 function RecordedOccurrences({ actions, players, match, currentTime, currentPeriod, sourceUrl, sideStyle, filterPlayerId, exporting, onFilter, onPreview, onDelete, onExport, onSeek, onSetPeriodMarker }: { actions: ActionRecord[]; players: PlayerRecord[]; match: MatchDetail; currentTime: number; currentPeriod: number | null; sourceUrl: string | null; sideStyle?: CSSProperties; filterPlayerId: string; exporting: boolean; onFilter: (id: string) => void; onPreview: (action: ActionRecord) => void; onDelete: (action: ActionRecord) => void; onExport: () => void; onSeek: (seconds: number) => void; onSetPeriodMarker: (key: PeriodMarkerKey) => void }) {

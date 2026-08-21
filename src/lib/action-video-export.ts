@@ -2,11 +2,11 @@ import { formatTime } from "@/lib/time";
 
 export type ExportableAction = { startTimeSeconds: number; endTimeSeconds: number; actionName: string; player: { name: string } };
 
-export async function exportActionClip(file: File, action: ExportableAction, matchName: string, onStatus?: (status: string) => void) {
+export async function exportActionClip(sourceFile: Blob | string, action: ExportableAction, matchName: string, onStatus?: (status: string) => void) {
   if (typeof MediaRecorder === "undefined") throw new Error("This browser does not support video export.");
   const mimeType = ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"].find((type) => MediaRecorder.isTypeSupported(type));
   if (!mimeType) throw new Error("This browser cannot create video clips. Use a recent version of Chrome or Edge.");
-  const url = URL.createObjectURL(file); const video = document.createElement("video"); video.preload = "auto"; video.playsInline = true; video.src = url;
+  const objectUrl = typeof sourceFile === "string" ? null : URL.createObjectURL(sourceFile); const url = typeof sourceFile === "string" ? sourceFile : objectUrl!; const video = document.createElement("video"); video.preload = "auto"; video.playsInline = true; if (!objectUrl) video.crossOrigin = "anonymous"; video.src = url;
   let stream: MediaStream | null = null; let frame = 0; let audioContext: AudioContext | null = null;
   try {
     await waitFor(video, "loadedmetadata"); const start = Math.max(0, Math.min(action.startTimeSeconds, video.duration)); const end = Math.max(start + .1, Math.min(action.endTimeSeconds, video.duration));
@@ -18,7 +18,7 @@ export async function exportActionClip(file: File, action: ExportableAction, mat
     video.currentTime = start; await Promise.race([waitFor(video, "seeked"), wait(300)]); recorder.start(250); await video.play();
     const draw = () => { context.drawImage(video, 0, 0, canvas.width, canvas.height); onStatus?.(`Exporting ${formatTime(video.currentTime - start)} / ${formatTime(end - start)}`); if (video.ended || video.currentTime >= end) { video.pause(); recorder.stop(); return; } frame = requestAnimationFrame(draw); }; draw();
     const blob = await result; const extension = blob.type.includes("mp4") ? "mp4" : "webm"; return { blob, fileName: `${safe(matchName)}-${safe(action.player.name)}-${safe(action.actionName)}-${formatTime(start).replace(/:/g, "-")}.${extension}` };
-  } finally { if (frame) cancelAnimationFrame(frame); video.pause(); video.removeAttribute("src"); video.load(); stream?.getTracks().forEach((track) => track.stop()); if (audioContext) await audioContext.close().catch(() => undefined); URL.revokeObjectURL(url); }
+  } finally { if (frame) cancelAnimationFrame(frame); video.pause(); video.removeAttribute("src"); video.load(); stream?.getTracks().forEach((track) => track.stop()); if (audioContext) await audioContext.close().catch(() => undefined); if (objectUrl) URL.revokeObjectURL(objectUrl); }
 }
 
 export function downloadBlob(blob: Blob, fileName: string) { const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = fileName; document.body.append(anchor); anchor.click(); anchor.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 30_000); }

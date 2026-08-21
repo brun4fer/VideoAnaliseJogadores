@@ -3,6 +3,7 @@ import { AuthError } from "@/lib/auth";
 
 export function ok<T>(data: T, status = 200) { return NextResponse.json(data, { status }); }
 export function badRequest(message: string) { return NextResponse.json({ error: message }, { status: 400 }); }
+export function forbidden(message = "You do not have access to this resource.") { return NextResponse.json({ error: message }, { status: 403 }); }
 export function notFound(message = "Record not found.") { return NextResponse.json({ error: message }, { status: 404 }); }
 export function serverError(error: unknown) {
   console.error(error);

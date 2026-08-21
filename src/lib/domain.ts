@@ -26,7 +26,7 @@ export type MatchDetail = {
   squad: Array<{ playerId: string; sortOrder: number; player: PlayerRecord }>;
   opponentClub: { id: string; name: string };
   competition: { id: string; name: string; season: { id: string; name: string } };
-  video: { fileName: string; fileSize: string; durationSeconds: number; mimeType: string } | null;
+  video: { fileName: string; fileSize: string; durationSeconds: number; mimeType: string; storageStatus: "LOCAL" | "UPLOADING" | "READY" | "FAILED"; uploadedAt: string | null } | null;
   playerActions: ActionRecord[];
 };
 

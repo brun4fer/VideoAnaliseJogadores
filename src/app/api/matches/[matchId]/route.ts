@@ -3,6 +3,8 @@ import { requireAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sortPlayersByPosition } from "@/lib/player-positions";
 import { periodMarkers, type PeriodMarkerKey, validatePeriodMarkers } from "@/lib/match-periods";
+import { abortMultipartUpload, deleteR2Object } from "@/lib/r2";
+import { serializeVideo } from "@/lib/video";
 
 const matchInclude = {
   club: { include: { players: { where: { active: true }, orderBy: [{ shirtNumber: "asc" as const }, { name: "asc" as const }] } } },
@@ -21,7 +23,7 @@ export async function GET(_: Request, context: { params: Promise<{ matchId: stri
     if (!match) return notFound("Match not found.");
     const fallbackPlayers = sortPlayersByPosition(match.club.players).slice(0, 18);
     const squad = match.squad.length ? match.squad : fallbackPlayers.map((player, sortOrder) => ({ matchId, playerId: player.id, sortOrder, createdAt: match.createdAt, player }));
-    return ok({ ...match, squad, matchDate: match.matchDate?.toISOString() || null, video: match.video ? { ...match.video, fileSize: match.video.fileSize.toString() } : null });
+    return ok({ ...match, squad, matchDate: match.matchDate?.toISOString() || null, video: match.video ? serializeVideo(match.video) : null });
   } catch (error) { return serverError(error); }
 }
 
@@ -77,12 +79,23 @@ export async function PATCH(request: Request, context: { params: Promise<{ match
       }
       return transaction.match.findUniqueOrThrow({ where: { id: matchId }, include: matchInclude });
     });
-    return ok({ ...updated, matchDate: updated.matchDate?.toISOString() || null, video: updated.video ? { ...updated.video, fileSize: updated.video.fileSize.toString() } : null });
+    return ok({ ...updated, matchDate: updated.matchDate?.toISOString() || null, video: updated.video ? serializeVideo(updated.video) : null });
   } catch (error) { return serverError(error); }
 }
 
 export async function DELETE(_: Request, context: { params: Promise<{ matchId: string }> }) {
-  try { const { workspace } = await requireAccount(); const { matchId } = await context.params; await prisma.match.deleteMany({ where: { id: matchId, workspaceId: workspace.id } }); return ok({ deleted: true }); }
+  try {
+    const { user, workspace } = await requireAccount();
+    const { matchId } = await context.params;
+    const match = await prisma.match.findFirst({ where: { id: matchId, workspaceId: workspace.id }, include: { video: true } });
+    if (!match) return ok({ deleted: true });
+    if (match.video?.ownerId === user.id && match.video.storageKey) {
+      if (match.video.uploadId) await abortMultipartUpload(match.video.storageKey, match.video.uploadId).catch(() => undefined);
+      await deleteR2Object(match.video.storageKey);
+    }
+    await prisma.match.delete({ where: { id: match.id } });
+    return ok({ deleted: true });
+  }
   catch (error) { return serverError(error); }
 }
 

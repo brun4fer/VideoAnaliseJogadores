@@ -5,12 +5,13 @@ import { FileVideo, Upload } from "lucide-react";
 import { getRememberedMatchVideo, rememberMatchVideo } from "@/lib/local-video-store";
 import { actionTypeByKey } from "@/lib/action-types";
 import { formatTime } from "@/lib/time";
+import { getRemoteVideoUrl } from "@/lib/remote-video-store";
 import { Button, Label, Panel } from "@/components/ui";
 
 export type ClipAction = {
   id: string; actionKey: string; actionName: string; startTimeSeconds: number; endTimeSeconds: number; eventTimeSeconds: number;
   player: { name: string };
-  match: { id: string; roundName: string | null; club: { name: string }; opponentClub: { name: string }; video: { fileName: string } | null };
+  match: { id: string; roundName: string | null; club: { name: string }; opponentClub: { name: string }; video: { fileName: string; storageStatus: "LOCAL" | "UPLOADING" | "READY" | "FAILED" } | null };
 };
 
 export function ActionClipPlayer({ action, className = "" }: { action: ClipAction | null; className?: string }) {
@@ -30,7 +31,13 @@ export function ActionClipPlayer({ action, className = "" }: { action: ClipActio
     objectUrlRef.current = null;
     if (!action) return () => { active = false; };
     setLoading(true);
-    getRememberedMatchVideo(action.match.id).then((file) => {
+    (action.match.video?.storageStatus === "READY" ? getRemoteVideoUrl(action.match.id).then((remote) => remote.url).catch(() => null) : Promise.resolve(null)).then(async (remoteUrl) => {
+      if (!active || request !== requestRef.current) return;
+      if (remoteUrl) {
+        setSourceUrl(remoteUrl);
+        return;
+      }
+      const file = await getRememberedMatchVideo(action.match.id);
       if (!active || request !== requestRef.current) return;
       if (file) {
         objectUrlRef.current = URL.createObjectURL(file);
@@ -64,6 +71,6 @@ export function ActionClipPlayer({ action, className = "" }: { action: ClipActio
   return <Panel className={`overflow-hidden ${className}`}>
     <input ref={fileRef} type="file" accept="video/*" className="hidden" onChange={(event) => { void selectVideo(event.target.files?.[0]); event.currentTarget.value = ""; }}/>
     <div className="border-b border-white/10 p-3"><Label>Selected clip</Label>{action ? <><p className="mt-1 truncate text-sm font-semibold text-white">{action.player.name} · {actionName}</p><p className="mt-1 truncate text-xs text-slate-500">{action.match.club.name} vs {action.match.opponentClub.name} · {formatTime(action.startTimeSeconds)}–{formatTime(action.endTimeSeconds)}</p></> : null}</div>
-    <div className="relative aspect-video bg-black">{sourceUrl && action ? <video key={`${sourceUrl}-${action.id}`} src={sourceUrl} controls playsInline className="h-full w-full object-contain" onLoadedMetadata={(event) => { const end = Math.min(event.currentTarget.duration, action.endTimeSeconds); event.currentTarget.currentTime = Math.min(action.startTimeSeconds, end); void event.currentTarget.play(); }} onPlay={(event) => { const end = Math.min(event.currentTarget.duration, action.endTimeSeconds); if (event.currentTarget.currentTime < action.startTimeSeconds || event.currentTarget.currentTime >= end) event.currentTarget.currentTime = Math.min(action.startTimeSeconds, end); }} onTimeUpdate={(event) => { const end = Math.min(event.currentTarget.duration, action.endTimeSeconds); if (event.currentTarget.currentTime >= end) { event.currentTarget.pause(); event.currentTarget.currentTime = end; } }}/> : <div className="flex h-full flex-col items-center justify-center p-5 text-center"><FileVideo size={32} className="text-cyan-300"/><p className="mt-3 text-xs text-slate-400">{action ? loading ? "Restoring video…" : notice || "Select this match’s video." : "Select an action to view its clip."}</p>{action && !loading ? <Button size="sm" className="mt-3" onClick={() => fileRef.current?.click()}><Upload size={14}/>Select video</Button> : null}</div>}</div>
+    <div className="relative aspect-video bg-black">{sourceUrl && action ? <video key={`${sourceUrl}-${action.id}`} src={sourceUrl} crossOrigin="anonymous" controls playsInline className="h-full w-full object-contain" onLoadedMetadata={(event) => { const end = Math.min(event.currentTarget.duration, action.endTimeSeconds); event.currentTarget.currentTime = Math.min(action.startTimeSeconds, end); void event.currentTarget.play(); }} onPlay={(event) => { const end = Math.min(event.currentTarget.duration, action.endTimeSeconds); if (event.currentTarget.currentTime < action.startTimeSeconds || event.currentTarget.currentTime >= end) event.currentTarget.currentTime = Math.min(action.startTimeSeconds, end); }} onTimeUpdate={(event) => { const end = Math.min(event.currentTarget.duration, action.endTimeSeconds); if (event.currentTarget.currentTime >= end) { event.currentTarget.pause(); event.currentTarget.currentTime = end; } }}/> : <div className="flex h-full flex-col items-center justify-center p-5 text-center"><FileVideo size={32} className="text-cyan-300"/><p className="mt-3 text-xs text-slate-400">{action ? loading ? "Restoring video…" : notice || "Upload this match’s video in its analysis page." : "Select an action to view its clip."}</p>{action && !loading ? <Button size="sm" className="mt-3" onClick={() => fileRef.current?.click()}><Upload size={14}/>Use local fallback</Button> : null}</div>}</div>
   </Panel>;
 }

@@ -12,7 +12,7 @@ import { Pitch } from "@/components/pitch";
 import { Badge, Button, Label, Panel, Select } from "@/components/ui";
 
 type Player = { id: string; name: string; club: { name: string } };
-type Match = { id: string; roundName: string | null; firstHalfAttacksRight: boolean; club: { name: string }; opponentClub: { name: string }; competition: { id: string; name: string; season: { name: string } }; video: { fileName: string } | null };
+type Match = { id: string; roundName: string | null; firstHalfAttacksRight: boolean; club: { name: string }; opponentClub: { name: string }; competition: { id: string; name: string; season: { name: string } }; video: { fileName: string; storageStatus: "LOCAL" | "UPLOADING" | "READY" | "FAILED" } | null };
 type MapAction = ClipAction & { playerId: string; actionKey: string; outcome: string | null; fieldX: number | null; fieldY: number | null; period: number | null; matchId: string; match: Match };
 type Competition = { id: string; name: string; season: { name: string } };
 export function MapsClient() {

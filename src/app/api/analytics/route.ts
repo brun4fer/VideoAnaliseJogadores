@@ -1,6 +1,7 @@
 import { ok, serverError } from "@/lib/api";
 import { requireAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { serializeVideo } from "@/lib/video";
 
 export async function GET() {
   try {
@@ -11,7 +12,7 @@ export async function GET() {
       prisma.match.findMany({ where: { workspaceId: workspace.id }, orderBy: { matchDate: "desc" }, include: { club: true, opponentClub: true, competition: { include: { season: true } }, video: true } }),
       prisma.competition.findMany({ where: { workspaceId: workspace.id }, orderBy: { name: "asc" }, include: { season: true } }),
     ]);
-    const serializeVideo = <T extends { video: { fileSize: bigint } | null }>(row: T) => ({ ...row, video: row.video ? { ...row.video, fileSize: row.video.fileSize.toString() } : null });
+    const serializeRowVideo = <T extends { video: Parameters<typeof serializeVideo>[0] | null }>(row: T) => ({ ...row, video: row.video ? serializeVideo(row.video) : null });
     const actions = occurrences.flatMap((occurrence) => {
       const subActions = occurrence.subActions.length ? occurrence.subActions : occurrence.actionKey !== "unclassified" ? [{
         id: occurrence.id, playerActionId: occurrence.id, actionKey: occurrence.actionKey, actionName: occurrence.actionName,
@@ -27,9 +28,9 @@ export async function GET() {
         startTimeSeconds: occurrence.startTimeSeconds,
         endTimeSeconds: occurrence.endTimeSeconds,
         player: occurrence.player,
-        match: serializeVideo(occurrence.match),
+        match: serializeRowVideo(occurrence.match),
       }));
     });
-    return ok({ players, actions, matches: matches.map(serializeVideo), competitions });
+    return ok({ players, actions, matches: matches.map(serializeRowVideo), competitions });
   } catch (error) { return serverError(error); }
 }
