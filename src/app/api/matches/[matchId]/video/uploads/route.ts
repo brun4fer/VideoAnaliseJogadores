@@ -1,5 +1,5 @@
 import { badRequest, forbidden, ok, serverError } from "@/lib/api";
-import { requireAccount } from "@/lib/auth";
+import { requireManagementAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { abortMultipartUpload, createMultipartUpload, listMultipartParts } from "@/lib/r2";
 import { serializeVideo } from "@/lib/video";
@@ -15,7 +15,7 @@ function partSizeFor(fileSize: number) {
 export async function POST(request: Request, context: { params: Promise<{ matchId: string }> }) {
   let created: { key: string; uploadId: string } | null = null;
   try {
-    const { user, workspace } = await requireAccount();
+    const { user, workspace } = await requireManagementAccount();
     const { matchId } = await context.params;
     const body = await request.json();
     const fileName = typeof body.fileName === "string" ? body.fileName.trim() : "";
@@ -73,7 +73,7 @@ export async function POST(request: Request, context: { params: Promise<{ matchI
 
 export async function DELETE(request: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const { user, workspace } = await requireAccount();
+    const { user, workspace } = await requireManagementAccount();
     const { matchId } = await context.params;
     const body = await request.json().catch(() => ({}));
     const video = await prisma.video.findFirst({ where: { matchId, match: { workspaceId: workspace.id } } });

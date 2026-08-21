@@ -1,12 +1,12 @@
 import { badRequest, ok, serverError } from "@/lib/api";
-import { requireAccount } from "@/lib/auth";
+import { requireManagementAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getMatchPeriodAtTime } from "@/lib/match-periods";
 import { actionWindow, roundTime } from "@/lib/time";
 
 export async function POST(request: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const { workspace } = await requireAccount();
+    const { workspace } = await requireManagementAccount();
     const { matchId } = await context.params;
     const body = await request.json();
     const eventTime = Number(body.eventTimeSeconds);

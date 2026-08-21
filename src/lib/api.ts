@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { AuthError } from "@/lib/auth";
+import { AuthError, ManagementAccessError } from "@/lib/auth";
 
 export function ok<T>(data: T, status = 200) { return NextResponse.json(data, { status }); }
 export function badRequest(message: string) { return NextResponse.json({ error: message }, { status: 400 }); }
@@ -8,5 +8,6 @@ export function notFound(message = "Record not found.") { return NextResponse.js
 export function serverError(error: unknown) {
   console.error(error);
   if (error instanceof AuthError) return NextResponse.json({ error: error.message }, { status: 401 });
+  if (error instanceof ManagementAccessError) return NextResponse.json({ error: error.message, code: "MANAGEMENT_ACCESS_REQUIRED" }, { status: 403 });
   return NextResponse.json({ error: error instanceof Error ? error.message : "Internal error." }, { status: 500 });
 }

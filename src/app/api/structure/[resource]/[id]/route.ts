@@ -1,11 +1,11 @@
 import { badRequest, ok, serverError } from "@/lib/api";
-import { requireAccount } from "@/lib/auth";
+import { requireManagementAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { deleteR2Object } from "@/lib/r2";
 
 export async function DELETE(_: Request, context: { params: Promise<{ resource: string; id: string }> }) {
   try {
-    const { workspace } = await requireAccount(); const { resource, id } = await context.params;
+    const { workspace } = await requireManagementAccount(); const { resource, id } = await context.params;
     if (resource === "season") await prisma.season.deleteMany({ where: { id, workspaceId: workspace.id } });
     else if (resource === "competition") await prisma.competition.deleteMany({ where: { id, workspaceId: workspace.id } });
     else if (resource === "opponent") {

@@ -1,5 +1,5 @@
 import { badRequest, forbidden, notFound, ok, serverError } from "@/lib/api";
-import { requireAccount } from "@/lib/auth";
+import { requireAccount, requireManagementAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { abortMultipartUpload, createPlaybackUrl, deleteR2Object } from "@/lib/r2";
 import { serializeVideo } from "@/lib/video";
@@ -19,7 +19,7 @@ export async function GET(_: Request, context: { params: Promise<{ matchId: stri
 // Retained for legacy clients that only register a local file's metadata.
 export async function PUT(request: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const { user, workspace } = await requireAccount();
+    const { user, workspace } = await requireManagementAccount();
     const { matchId } = await context.params;
     const body = await request.json();
     const match = await prisma.match.findFirst({ where: { id: matchId, workspaceId: workspace.id }, include: { video: true } });
@@ -41,7 +41,7 @@ export async function PUT(request: Request, context: { params: Promise<{ matchId
 
 export async function DELETE(_: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const { user, workspace } = await requireAccount();
+    const { user, workspace } = await requireManagementAccount();
     const { matchId } = await context.params;
     const match = await prisma.match.findFirst({ where: { id: matchId, workspaceId: workspace.id }, include: { video: true } });
     if (!match?.video) return ok({ deleted: true });

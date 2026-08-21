@@ -8,16 +8,17 @@ datasource db {
 }
 
 model Workspace {
-  id           String        @id @default(cuid())
-  name         String
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  seasons      Season[]
-  competitions Competition[]
-  clubs        Club[]
-  players      Player[]
-  matches      Match[]
-  users        User[]
+  id                     String        @id @default(cuid())
+  name                   String
+  managementPasswordHash String?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  seasons                Season[]
+  competitions           Competition[]
+  clubs                  Club[]
+  players                Player[]
+  matches                Match[]
+  users                  User[]
 }
 
 model User {
@@ -36,12 +37,13 @@ model User {
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique
-  userId    String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String    @id @default(cuid())
+  tokenHash            String    @unique
+  userId               String
+  expiresAt            DateTime
+  managementUnlockedAt DateTime?
+  createdAt            DateTime  @default(now())
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])

@@ -9,6 +9,10 @@ export class AuthError extends Error {
   constructor(message = "Invalid or expired session.") { super(message); this.name = "AuthError"; }
 }
 
+export class ManagementAccessError extends Error {
+  constructor(message = "Enter the management password to access this area.") { super(message); this.name = "ManagementAccessError"; }
+}
+
 export function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   return `${salt}:${scryptSync(password, salt, 64).toString("hex")}`;
@@ -45,5 +49,12 @@ export async function requireAccount() {
   if (!token) throw new AuthError();
   const session = await prisma.session.findFirst({ where: { tokenHash: tokenHash(token), expiresAt: { gt: new Date() } }, include: { user: { include: { workspace: true } } } });
   if (!session) throw new AuthError();
-  return { user: session.user, workspace: session.user.workspace };
+  return { user: session.user, workspace: session.user.workspace, session };
+}
+
+export async function requireManagementAccount() {
+  const account = await requireAccount();
+  if (!account.workspace.managementPasswordHash) throw new ManagementAccessError("Create the management password before accessing this area.");
+  if (!account.session.managementUnlockedAt) throw new ManagementAccessError();
+  return account;
 }

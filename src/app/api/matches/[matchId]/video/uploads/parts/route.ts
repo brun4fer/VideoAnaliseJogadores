@@ -1,11 +1,11 @@
 import { badRequest, forbidden, ok, serverError } from "@/lib/api";
-import { requireAccount } from "@/lib/auth";
+import { requireManagementAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { presignMultipartParts } from "@/lib/r2";
 
 export async function POST(request: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const { user, workspace } = await requireAccount();
+    const { user, workspace } = await requireManagementAccount();
     const { matchId } = await context.params;
     const body = await request.json();
     const partNumbers: number[] = Array.isArray(body.partNumbers) ? [...new Set<number>(body.partNumbers.map(Number))] : [];

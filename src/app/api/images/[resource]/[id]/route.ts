@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { badRequest, notFound, ok, serverError } from "@/lib/api";
-import { requireAccount } from "@/lib/auth";
+import { requireAccount, requireManagementAccount } from "@/lib/auth";
 import { IMAGE_TYPES, MAX_IMAGE_FILE_SIZE, imagePath, isImageMimeType, type ImageResource } from "@/lib/image-storage";
 import { prisma } from "@/lib/prisma";
 import { createObjectUploadUrl, createPlaybackUrl, deleteR2Object, headR2Object } from "@/lib/r2";
@@ -46,7 +46,7 @@ export async function GET(_: Request, context: RouteContext) {
 
 export async function POST(request: Request, context: RouteContext) {
   try {
-    const { user, workspace } = await requireAccount();
+    const { user, workspace } = await requireManagementAccount();
     const { resource: rawResource, id } = await context.params;
     const resource = parseResource(rawResource);
     if (!resource) return badRequest("Invalid image resource.");
@@ -73,7 +73,7 @@ export async function POST(request: Request, context: RouteContext) {
 
 export async function PATCH(request: Request, context: RouteContext) {
   try {
-    const { user, workspace } = await requireAccount();
+    const { user, workspace } = await requireManagementAccount();
     const { resource: rawResource, id } = await context.params;
     const resource = parseResource(rawResource);
     if (!resource) return badRequest("Invalid image resource.");
@@ -131,7 +131,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
 export async function DELETE(request: Request, context: RouteContext) {
   try {
-    const { user, workspace } = await requireAccount();
+    const { user, workspace } = await requireManagementAccount();
     const { resource: rawResource, id } = await context.params;
     const resource = parseResource(rawResource);
     if (!resource) return badRequest("Invalid image resource.");

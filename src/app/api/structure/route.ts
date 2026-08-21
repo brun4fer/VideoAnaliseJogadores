@@ -1,10 +1,10 @@
 import { badRequest, ok, serverError } from "@/lib/api";
-import { requireAccount } from "@/lib/auth";
+import { requireManagementAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const { workspace } = await requireAccount();
+    const { workspace } = await requireManagementAccount();
     const [clientClub, seasons, opponents] = await Promise.all([
       prisma.club.findFirst({ where: { workspaceId: workspace.id, isClientClub: true }, include: { players: { orderBy: [{ shirtNumber: "asc" }, { name: "asc" }] }, competitions: { select: { id: true, name: true } } } }),
       prisma.season.findMany({ where: { workspaceId: workspace.id }, orderBy: { createdAt: "desc" }, include: { competitions: { orderBy: { name: "asc" }, include: { clubs: { where: { isClientClub: false }, orderBy: { name: "asc" } } } } } }),
@@ -16,7 +16,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { workspace } = await requireAccount(); const body = await request.json();
+    const { workspace } = await requireManagementAccount(); const body = await request.json();
     if (body.kind === "clientClub") {
       if (!body.name?.trim()) return badRequest("Enter the client team name.");
       const existing = await prisma.club.findFirst({ where: { workspaceId: workspace.id, isClientClub: true } });

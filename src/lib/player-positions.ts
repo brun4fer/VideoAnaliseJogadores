@@ -41,3 +41,14 @@ export function playerPositionRank(player: { position?: string | null; isGoalkee
 export function sortPlayersByPosition<T extends { name: string; shirtNumber?: number | null; position?: string | null; isGoalkeeper?: boolean }>(players: T[]) {
   return [...players].sort((a, b) => playerPositionRank(a) - playerPositionRank(b) || (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999) || a.name.localeCompare(b.name));
 }
+
+export type PlayerPositionGroup = "goalkeepers" | "defenders" | "midfielders" | "forwards";
+
+export function playerPositionGroup(player: { position?: string | null; isGoalkeeper?: boolean }): PlayerPositionGroup {
+  if (player.isGoalkeeper) return "goalkeepers";
+  const position = (player.position || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (position.includes("goalkeeper") || position.includes("guarda-redes")) return "goalkeepers";
+  if (position.includes("back") || position.includes("defesa") || position.includes("lateral")) return "defenders";
+  if (position.includes("midfielder") || position.includes("medio")) return "midfielders";
+  return "forwards";
+}

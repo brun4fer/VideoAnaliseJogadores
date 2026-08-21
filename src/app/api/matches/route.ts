@@ -1,11 +1,11 @@
 import { badRequest, ok, serverError } from "@/lib/api";
-import { requireAccount } from "@/lib/auth";
+import { requireManagementAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serializeVideo } from "@/lib/video";
 
 export async function GET() {
   try {
-    const { workspace } = await requireAccount();
+    const { workspace } = await requireManagementAccount();
     const matches = await prisma.match.findMany({ where: { workspaceId: workspace.id }, orderBy: [{ matchDate: "desc" }, { createdAt: "desc" }], include: { club: true, opponentClub: true, competition: { include: { season: true } }, video: true, _count: { select: { playerActions: true, squad: true } } } });
     return ok(matches.map(({ video, ...match }) => ({ ...match, video: video ? serializeVideo(video) : null }))) ;
   } catch (error) { return serverError(error); }
@@ -13,7 +13,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { workspace } = await requireAccount();
+    const { workspace } = await requireManagementAccount();
     const body = await request.json();
     if (!body.opponentClubId || !body.competitionId) return badRequest("Select the competition and opponent.");
     const playerIds = uniquePlayerIds(body.playerIds);

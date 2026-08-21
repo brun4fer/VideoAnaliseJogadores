@@ -1,5 +1,5 @@
 import { badRequest, forbidden, ok, serverError } from "@/lib/api";
-import { requireAccount } from "@/lib/auth";
+import { requireManagementAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { completeMultipartUpload } from "@/lib/r2";
 import { serializeVideo } from "@/lib/video";
@@ -9,7 +9,7 @@ function partSizeFor(fileSize: number) { return Math.max(64 * MEBIBYTE, Math.cei
 
 export async function POST(request: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const { user, workspace } = await requireAccount();
+    const { user, workspace } = await requireManagementAccount();
     const { matchId } = await context.params;
     const body = await request.json();
     const parts = Array.isArray(body.parts) ? body.parts.map((part: { partNumber?: unknown; etag?: unknown }) => ({ partNumber: Number(part.partNumber), etag: typeof part.etag === "string" ? part.etag : "" })) : [];

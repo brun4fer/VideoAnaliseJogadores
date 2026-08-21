@@ -1,12 +1,12 @@
 import { actionsForPlayer, actionTypeByKey } from "@/lib/action-types";
 import { badRequest, ok, serverError } from "@/lib/api";
-import { requireAccount } from "@/lib/auth";
+import { requireManagementAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { roundTime } from "@/lib/time";
 
 export async function PATCH(request: Request, context: { params: Promise<{ subActionId: string }> }) {
   try {
-    const { workspace } = await requireAccount();
+    const { workspace } = await requireManagementAccount();
     const { subActionId } = await context.params;
     const body = await request.json();
     const current = await prisma.playerSubAction.findFirst({ where: { id: subActionId, playerAction: { match: { workspaceId: workspace.id } } }, include: { playerAction: { include: { player: true } } } });
@@ -25,7 +25,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ subAc
 }
 
 export async function DELETE(_: Request, context: { params: Promise<{ subActionId: string }> }) {
-  try { const { workspace } = await requireAccount(); const { subActionId } = await context.params; await prisma.playerSubAction.deleteMany({ where: { id: subActionId, playerAction: { match: { workspaceId: workspace.id } } } }); return ok({ deleted: true }); }
+  try { const { workspace } = await requireManagementAccount(); const { subActionId } = await context.params; await prisma.playerSubAction.deleteMany({ where: { id: subActionId, playerAction: { match: { workspaceId: workspace.id } } } }); return ok({ deleted: true }); }
   catch (error) { return serverError(error); }
 }
 
