@@ -85,6 +85,21 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
     }
   }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const editId = search.get("edit");
+    if (!selected || !editId) return;
+    const subaction = selected.subActions.find((item) => item.id === editId);
+    if (!subaction) return;
+    setEditingId(subaction.id);
+    setSelectedType(actionTypeByKey.get(subaction.actionKey) || null);
+    setCoordinate(subaction.fieldX != null && subaction.fieldY != null ? { x: subaction.fieldX, y: subaction.fieldY } : null);
+    setCurrentTime(subaction.eventTimeSeconds);
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = subaction.eventTimeSeconds;
+    }
+  }, [search, selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function selectOccurrence(action: ActionRecord) {
     setSelectedId(action.id);
     if (videoRef.current) {

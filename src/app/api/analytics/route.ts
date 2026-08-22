@@ -22,6 +22,7 @@ export async function GET() {
       return subActions.map((subAction) => ({
         ...subAction,
         parentActionId: occurrence.id,
+        sourceType: occurrence.subActions.length ? "subaction" as const : "occurrence" as const,
         matchId: occurrence.matchId,
         playerId: occurrence.playerId,
         period: occurrence.period,
