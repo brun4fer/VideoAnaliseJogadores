@@ -19,6 +19,8 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
   const search = useSearchParams();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const playlistActiveRef = useRef(false);
+  const advancingRef = useRef(false);
   const [match, setMatch] = useState<MatchDetail | null>(null);
   const [sourceUrl, setSourceUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,6 +37,7 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
 
   useEffect(() => {
     apiFetch<MatchDetail>(`/api/matches/${matchId}`).then(async (data) => {
+      playlistActiveRef.current = !search.get("edit");
       setMatch(data);
       const requested = search.get("action");
       setSelectedId(data.playerActions.some((item) => item.id === requested) ? requested : data.playerActions[0]?.id || null);
@@ -75,6 +78,7 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
 
   useEffect(() => {
     if (!selected) return;
+    advancingRef.current = false;
     setCurrentTime(selected.eventTimeSeconds);
     setSelectedType(null);
     setCoordinate(null);
@@ -82,12 +86,14 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
     if (videoRef.current) {
       videoRef.current.pause();
       videoRef.current.currentTime = selected.startTimeSeconds;
+      if (playlistActiveRef.current) void videoRef.current.play();
     }
   }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const editId = search.get("edit");
     if (!selected || !editId) return;
+    playlistActiveRef.current = false;
     const subaction = selected.subActions.find((item) => item.id === editId);
     if (!subaction) return;
     setEditingId(subaction.id);
@@ -101,17 +107,24 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
   }, [search, selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function selectOccurrence(action: ActionRecord) {
-    setSelectedId(action.id);
-    if (videoRef.current) {
-      videoRef.current.pause();
+    playlistActiveRef.current = true;
+    advancingRef.current = false;
+    if (action.id === selected?.id && videoRef.current) {
       videoRef.current.currentTime = action.startTimeSeconds;
+      void videoRef.current.play();
+      return;
     }
+    setSelectedId(action.id);
   }
 
   function togglePlayback() {
     const video = videoRef.current;
     if (!video || !selected) return;
-    if (!video.paused) return video.pause();
+    if (!video.paused) {
+      playlistActiveRef.current = false;
+      return video.pause();
+    }
+    playlistActiveRef.current = true;
     if (video.currentTime < selected.startTimeSeconds || video.currentTime >= selected.endTimeSeconds) {
       video.currentTime = selected.startTimeSeconds;
     }
@@ -119,6 +132,7 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
   }
 
   function editSubaction(subaction: SubActionRecord) {
+    playlistActiveRef.current = false;
     setEditingId(subaction.id);
     setSelectedType(actionTypeByKey.get(subaction.actionKey) || null);
     setCoordinate(subaction.fieldX != null && subaction.fieldY != null ? { x: subaction.fieldX, y: subaction.fieldY } : null);
@@ -207,8 +221,15 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
         <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[.16em] text-slate-500">Player</span>
         <Select className="h-8 min-w-0 flex-1 py-0 text-xs" value={filterPlayerId} onChange={(event) => {
           const id = event.target.value;
+          const first = match.playerActions.find((item) => id === "all" || item.playerId === id) || null;
+          playlistActiveRef.current = Boolean(first);
           setFilterPlayerId(id);
-          setSelectedId((match.playerActions.find((item) => id === "all" || item.playerId === id))?.id || null);
+          if (first?.id === selected?.id && videoRef.current) {
+            videoRef.current.currentTime = first.startTimeSeconds;
+            void videoRef.current.play();
+          } else {
+            setSelectedId(first?.id || null);
+          }
         }}>
           <option value="all">All players ({match.playerActions.length})</option>
           {players.map((player) => <option key={player.id} value={player.id}>{player.name} ({match.playerActions.filter((item) => item.playerId === player.id).length})</option>)}
@@ -238,11 +259,18 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
           {sourceUrl && selected ? <video ref={videoRef} src={sourceUrl} crossOrigin="anonymous" playsInline className="h-full w-full object-contain" onLoadedMetadata={(event) => {
             event.currentTarget.playbackRate = rate;
             event.currentTarget.currentTime = selected.startTimeSeconds;
+            if (playlistActiveRef.current) void event.currentTarget.play();
           }} onTimeUpdate={(event) => {
             setCurrentTime(event.currentTarget.currentTime);
-            if (event.currentTarget.currentTime >= selected.endTimeSeconds) {
+            if (event.currentTarget.currentTime >= selected.endTimeSeconds && !advancingRef.current) {
+              advancingRef.current = true;
               event.currentTarget.pause();
               event.currentTarget.currentTime = selected.endTimeSeconds;
+              if (playlistActiveRef.current && selectedIndex >= 0 && selectedIndex < occurrences.length - 1) {
+                setSelectedId(occurrences[selectedIndex + 1].id);
+              } else {
+                playlistActiveRef.current = false;
+              }
             }
           }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}/> : <button className="flex h-full min-h-72 w-full flex-col items-center justify-center" onClick={() => fileRef.current?.click()}>
             <FileVideo size={38} className="text-cyan-300"/>
@@ -279,6 +307,7 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
           <div className="mt-1 flex shrink-0 items-center justify-between"><Label className="text-[9px]">Action</Label>{editingId ? <button type="button" onClick={resetEditor} className="inline-flex items-center gap-1 text-[8px] text-cyan-200"><X size={9}/>Cancel edit</button> : null}</div>
           <div className="mt-1 grid shrink-0 grid-cols-2 gap-1 xl:grid-cols-3">
             {types.map((type) => <button key={type.key} type="button" title={`${type.group}: ${type.name}`} onClick={() => {
+              playlistActiveRef.current = false;
               setSelectedType(type);
               setEditingId(null);
               setCoordinate(null);
