@@ -184,14 +184,19 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
 
   async function removeSubaction(subaction: SubActionRecord) {
     if (!match || !selected || !confirm(`Delete ${subaction.actionName}?`)) return;
-    await apiFetch(`/api/subactions/${subaction.id}`, { method: "DELETE" });
-    setMatch({
-      ...match,
-      playerActions: match.playerActions.map((action) => action.id === selected.id
-        ? { ...action, subActions: action.subActions.filter((item) => item.id !== subaction.id) }
-        : action),
-    });
-    if (editingId === subaction.id) resetEditor();
+    try {
+      await apiFetch(`/api/subactions/${subaction.id}`, { method: "DELETE" });
+      setMatch({
+        ...match,
+        playerActions: match.playerActions.map((action) => action.id === selected.id
+          ? { ...action, subActions: action.subActions.filter((item) => item.id !== subaction.id) }
+          : action),
+      });
+      if (editingId === subaction.id) resetEditor();
+      setNotice(`${subaction.actionName} deleted.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not delete the subaction.");
+    }
   }
 
   async function chooseVideo(file?: File) {
@@ -337,8 +342,8 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
                   }
                   setCurrentTime(item.eventTimeSeconds);
                 }}>{item.actionName} · {formatTime(item.eventTimeSeconds)}</button>
-                <button aria-label="Edit subaction" onClick={() => editSubaction(item)} className="p-0.5 text-slate-500 hover:text-cyan-300"><Pencil size={10}/></button>
-                <button aria-label="Delete subaction" onClick={() => void removeSubaction(item)} className="p-0.5 text-slate-600 hover:text-red-300"><Trash2 size={10}/></button>
+                <button type="button" aria-label={`Edit ${item.actionName}`} title="Edit subaction" onClick={() => editSubaction(item)} className="inline-flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-[8px] font-semibold text-slate-400 hover:bg-cyan-300/10 hover:text-cyan-200"><Pencil size={10}/>Edit</button>
+                <button type="button" aria-label={`Delete ${item.actionName}`} title="Delete subaction" onClick={() => void removeSubaction(item)} className="inline-flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-[8px] font-semibold text-slate-500 hover:bg-red-400/10 hover:text-red-200"><Trash2 size={10}/>Delete</button>
               </div>) : <p className="py-1 text-[9px] text-slate-500">This occurrence is still unclassified.</p>}
             </div>
           </div>
