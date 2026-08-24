@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BarChart3, Home, LockKeyhole, LogOut, Map, Plus, UsersRound } from "lucide-react";
+import { AlertTriangle, BarChart3, Home, LockKeyhole, LogOut, Map, Plus, UsersRound } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { apiFetch } from "@/lib/http";
 import { PwaInstallButton } from "@/components/pwa-install-button";
 import { ManagementAccessDialog } from "@/components/management-access-dialog";
+import { Button, Label, Panel } from "@/components/ui";
 
 const links = [
   { href: "/", label: "Matches", icon: Home, protected: true },
@@ -18,6 +19,7 @@ const links = [
 ];
 
 type Account = { name: string; teamName: string | null; managementAccess: { configured: boolean; unlocked: boolean } };
+type Presence = { activeElsewhere: boolean; otherActiveSessions: number };
 function isManagementPath(pathname: string) { return pathname === "/" || pathname.startsWith("/matches") || pathname.startsWith("/structure") || pathname.startsWith("/analysis"); }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -25,6 +27,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [showManagementAccess, setShowManagementAccess] = useState(false);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [presence, setPresence] = useState<Presence | null>(null);
+  const [presenceAcknowledged, setPresenceAcknowledged] = useState(false);
   const isPublic = pathname === "/login" || pathname === "/register";
 
   useEffect(() => {
@@ -33,6 +37,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       if (!next.managementAccess.configured || (isManagementPath(pathname) && !next.managementAccess.unlocked)) setShowManagementAccess(true);
     }).catch(() => undefined);
   }, [isPublic, pathname]);
+
+  useEffect(() => {
+    if (isPublic) return;
+    let stopped = false;
+
+    async function heartbeat() {
+      try {
+        const next = await apiFetch<Presence>("/api/presence", { method: "POST" });
+        if (stopped) return;
+        setPresence(next);
+        if (!next.activeElsewhere) setPresenceAcknowledged(false);
+      } catch {
+        // Authentication failures are already handled by apiFetch. A temporary
+        // network failure should not interrupt the user's analysis workspace.
+      }
+    }
+
+    void heartbeat();
+    const timer = window.setInterval(() => void heartbeat(), 20_000);
+    const refreshPresence = () => void heartbeat();
+    window.addEventListener("focus", refreshPresence);
+    document.addEventListener("visibilitychange", refreshPresence);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshPresence);
+      document.removeEventListener("visibilitychange", refreshPresence);
+    };
+  }, [isPublic]);
 
   if (isPublic) return <main className="min-h-screen">{children}</main>;
 
@@ -63,6 +96,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
     </header>
     <main className="mx-auto max-w-[1800px] px-2 py-3 sm:px-4">{children}</main>
+    {presence?.activeElsewhere && !presenceAcknowledged ? <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md" role="alertdialog" aria-modal="true" aria-labelledby="concurrent-access-title" aria-describedby="concurrent-access-description">
+      <Panel className="w-full max-w-lg overflow-hidden border-amber-300/30 bg-pitch-950 p-5 shadow-2xl sm:p-6">
+        <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-amber-300/30 bg-amber-300/10 text-amber-200"><AlertTriangle size={22}/></div>
+        <Label className="mt-4 block text-amber-300/70">Concurrent access detected</Label>
+        <h2 id="concurrent-access-title" className="mt-1 text-xl font-bold text-white">Another user is currently active</h2>
+        <p id="concurrent-access-description" className="mt-2 text-sm leading-relaxed text-slate-400">This account is already being used in another browser or device. Editing matches at the same time can create conflicting analysis data. Please coordinate with the other user before continuing.</p>
+        {presence.otherActiveSessions > 1 ? <p className="mt-2 text-xs text-amber-200">{presence.otherActiveSessions} other active sessions were detected.</p> : null}
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button onClick={() => setPresenceAcknowledged(true)}>Continue anyway</Button>
+          <Button variant="primary" onClick={() => void logout()}><LogOut size={15}/>Sign out</Button>
+        </div>
+      </Panel>
+    </div> : null}
     {showManagementAccess && account ? <ManagementAccessDialog configured={account.managementAccess.configured} canDismiss={!isManagementPath(pathname)} onDismiss={() => { setShowManagementAccess(false); setPendingHref(null); }} onUnlocked={() => {
       setAccount({ ...account, managementAccess: { configured: true, unlocked: true } });
       setShowManagementAccess(false);

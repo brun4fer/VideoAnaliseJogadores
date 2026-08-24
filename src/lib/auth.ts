@@ -34,7 +34,7 @@ function tokenHash(token: string) { return createHash("sha256").update(token).di
 export async function createSession(userId: string) {
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-  await prisma.session.create({ data: { tokenHash: tokenHash(token), userId, expiresAt } });
+  await prisma.session.create({ data: { tokenHash: tokenHash(token), userId, expiresAt, lastSeenAt: new Date() } });
   (await cookies()).set(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", expires: expiresAt });
 }
 
