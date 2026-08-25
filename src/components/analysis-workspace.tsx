@@ -7,7 +7,7 @@ import { Archive, ArrowLeft, ChevronLeft, ChevronRight, Clock3, FileVideo, GripV
 import JSZip from "jszip";
 
 import { Badge, Button, Label, Panel } from "@/components/ui";
-import { downloadBlob, exportActionClip, safe } from "@/lib/action-video-export";
+import { downloadBlob, safe } from "@/lib/action-video-export";
 import type { ActionRecord, MatchDetail, PlayerRecord } from "@/lib/domain";
 import { isExportPickerCancellation, pickExportDirectory, toCsv, writeBlobToDirectory } from "@/lib/export-directory";
 import { apiFetch } from "@/lib/http";
@@ -15,6 +15,7 @@ import { getRememberedMatchVideo, rememberMatchVideo } from "@/lib/local-video-s
 import { getMatchPeriodAtTime, matchPeriodLabel, periodMarkers, type PeriodMarkerKey } from "@/lib/match-periods";
 import { playerPositionGroup, playerPositionLabel, type PlayerPositionGroup } from "@/lib/player-positions";
 import { getRemoteVideoUrl, uploadMatchVideo } from "@/lib/remote-video-store";
+import { SmartActionVideoExportSession } from "@/lib/smart-action-video-export";
 import { formatTime, roundTime } from "@/lib/time";
 
 export function AnalysisWorkspace({ matchId }: { matchId: string }) {
@@ -184,13 +185,14 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
     const root = `${safe(matchName)}-${actions.length}-clips`;
     const zip = directory ? null : new JSZip();
     const rows = [["player", "period", "event", "start", "end", "subactions", "files"]];
+    const exportSession = new SmartActionVideoExportSession(source);
     try {
       for (const [index, action] of actions.entries()) {
         const names = [...new Set(action.subActions.map((item) => item.actionName))];
         const folders = names.length ? names : ["Unclassified"];
         const label = names.join(" + ") || "Unclassified";
         setExportStatus(`Exporting ${index + 1} of ${actions.length}: ${action.player.name}`);
-        const result = await exportActionClip(source, { ...action, actionName: label }, matchName, (status) => setExportStatus(`${index + 1}/${actions.length} · ${status}`));
+        const result = await exportSession.exportActionClip({ ...action, actionName: label }, matchName, (status) => setExportStatus(`${index + 1}/${actions.length} · ${status}`));
         const fileName = `${String(index + 1).padStart(3, "0")}-${result.fileName}`;
         const paths = folders.map((folder) => `${safe(action.player.name)}/${safe(folder)}/${fileName}`);
         for (const path of paths) {
@@ -208,7 +210,7 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
       }
       setNotice(`${actions.length} clips exported successfully${directory ? ` to ${root}` : " in a ZIP file"}.`);
     } catch (error) { setNotice(error instanceof Error ? error.message : "Could not export the clips."); }
-    finally { setExporting(false); setExportStatus(""); }
+    finally { exportSession.dispose(); setExporting(false); setExportStatus(""); }
   }
 
   if (!match) return <Panel className="p-8 text-center text-slate-400">{notice || "Loading analysis…"}</Panel>;

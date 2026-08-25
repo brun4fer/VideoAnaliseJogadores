@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, Archive, CheckCircle2, Film, Loader2, Play, Upload, UserRound, XCircle } from "lucide-react";
 import JSZip from "jszip";
 import { allActionTypes, actionTypeByKey } from "@/lib/action-types";
-import { downloadBlob, exportActionClip, safe } from "@/lib/action-video-export";
+import { downloadBlob, safe } from "@/lib/action-video-export";
 import { isExportPickerCancellation, pickExportDirectory, toCsv, writeBlobToDirectory } from "@/lib/export-directory";
 import { apiFetch } from "@/lib/http";
 import { getRememberedMatchVideo, rememberMatchVideo } from "@/lib/local-video-store";
 import { getRemoteVideoUrl } from "@/lib/remote-video-store";
+import { SmartActionVideoExportSession } from "@/lib/smart-action-video-export";
 import { formatTime } from "@/lib/time";
 import { ActionClipPlayer, type ClipAction } from "@/components/action-clip-player";
 import { Badge, Button, Label, Panel, Select } from "@/components/ui";
@@ -64,14 +65,20 @@ export function ReportsClient() {
     const root = selectedPlayer ? `${safe(selectedPlayer)}-${actions.length}-clips` : `player-analysis-${actions.length}-clips`;
     const zip = directory ? null : new JSZip();
     const rows = [["player", "action", "match", "event", "start", "end", "file"]];
+    const exportSessions = new Map<string, SmartActionVideoExportSession>();
     try {
       for (const [index, currentAction] of actions.entries()) {
-        const file = await getVideo(currentAction.match);
         const matchName = `${currentAction.match.club.name} vs ${currentAction.match.opponentClub.name}`;
-        if (!file) throw new Error(`Upload the video for “${matchName}” before exporting.`);
+        let exportSession = exportSessions.get(currentAction.match.id);
+        if (!exportSession) {
+          const source = await getVideo(currentAction.match);
+          if (!source) throw new Error(`Upload the video for “${matchName}” before exporting.`);
+          exportSession = new SmartActionVideoExportSession(source);
+          exportSessions.set(currentAction.match.id, exportSession);
+        }
         const actionName = actionTypeByKey.get(currentAction.actionKey)?.name || currentAction.actionName;
         setStatus(`Exporting ${index + 1} of ${actions.length}: ${currentAction.player.name}`);
-        const result = await exportActionClip(file, { ...currentAction, actionName }, matchName, (message) => setStatus(`${index + 1}/${actions.length} · ${message}`));
+        const result = await exportSession.exportActionClip({ ...currentAction, actionName }, matchName, (message) => setStatus(`${index + 1}/${actions.length} · ${message}`));
         const path = `${safe(currentAction.player.name)}/${safe(actionName)}/${String(index + 1).padStart(3, "0")}-${result.fileName}`;
         if (directory) await writeBlobToDirectory(directory, `${root}/${path}`, result.blob);
         else zip?.file(`${root}/${path}`, result.blob);
@@ -87,6 +94,7 @@ export function ReportsClient() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not export the clips.");
     } finally {
+      exportSessions.forEach((session) => session.dispose());
       setExporting(false);
       setStatus("");
     }

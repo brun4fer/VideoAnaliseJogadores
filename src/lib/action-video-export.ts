@@ -2,7 +2,7 @@ import { formatTime } from "@/lib/time";
 
 export type ExportableAction = { startTimeSeconds: number; endTimeSeconds: number; actionName: string; player: { name: string } };
 
-export async function exportActionClip(sourceFile: Blob | string, action: ExportableAction, matchName: string, onStatus?: (status: string) => void) {
+export async function exportActionClipCompatibility(sourceFile: Blob | string, action: ExportableAction, matchName: string, onStatus?: (status: string) => void) {
   if (typeof MediaRecorder === "undefined") throw new Error("This browser does not support video export.");
   const mimeType = ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"].find((type) => MediaRecorder.isTypeSupported(type));
   if (!mimeType) throw new Error("This browser cannot create video clips. Use a recent version of Chrome or Edge.");
