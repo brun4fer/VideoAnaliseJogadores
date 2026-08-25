@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
-import { Archive, ArrowLeft, ChevronLeft, ChevronRight, Clock3, FileVideo, GripVertical, Loader2, Pause, Play, Tags, Trash2, Upload, UserRound, X } from "lucide-react";
+import { Archive, ArrowLeft, ChevronLeft, ChevronRight, Clock3, Cloud, FileVideo, FolderOpen, GripVertical, Loader2, Pause, Play, Tags, Trash2, Upload, UserRound, X } from "lucide-react";
 import JSZip from "jszip";
 
 import { Badge, Button, Label, Panel } from "@/components/ui";
@@ -14,7 +14,7 @@ import { apiFetch } from "@/lib/http";
 import { getRememberedMatchVideo, rememberMatchVideo } from "@/lib/local-video-store";
 import { getMatchPeriodAtTime, matchPeriodLabel, periodMarkers, type PeriodMarkerKey } from "@/lib/match-periods";
 import { playerPositionGroup, playerPositionLabel, type PlayerPositionGroup } from "@/lib/player-positions";
-import { getRemoteVideoUrl, uploadMatchVideo } from "@/lib/remote-video-store";
+import { attachCloudVideo, getCloudVideoLibrary, getRemoteVideoUrl, uploadMatchVideo, type CloudVideoAsset } from "@/lib/remote-video-store";
 import { SmartActionVideoExportSession } from "@/lib/smart-action-video-export";
 import { formatTime, roundTime } from "@/lib/time";
 
@@ -42,6 +42,10 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
   const [showIdentifyPrompt, setShowIdentifyPrompt] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [showCloudLibrary, setShowCloudLibrary] = useState(false);
+  const [cloudAssets, setCloudAssets] = useState<CloudVideoAsset[]>([]);
+  const [loadingCloudLibrary, setLoadingCloudLibrary] = useState(false);
+  const [attachingAssetId, setAttachingAssetId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try { const data = await apiFetch<MatchDetail>(`/api/matches/${matchId}`); setMatch(data); return data; }
@@ -99,6 +103,37 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
     } finally {
       if (uploadAbort.current === controller) uploadAbort.current = null;
       setUploading(false);
+    }
+  }
+
+  async function openCloudLibrary() {
+    setShowCloudLibrary(true);
+    setLoadingCloudLibrary(true);
+    try {
+      const result = await getCloudVideoLibrary();
+      setCloudAssets(result.assets);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not open the cloud video library.");
+      setShowCloudLibrary(false);
+    } finally {
+      setLoadingCloudLibrary(false);
+    }
+  }
+
+  async function attachSelectedCloudVideo(asset: CloudVideoAsset) {
+    setAttachingAssetId(asset.id);
+    try {
+      await attachCloudVideo(matchId, asset.id);
+      const remote = await getRemoteVideoUrl(matchId);
+      setSourceUrl(remote.url);
+      setDuration(asset.durationSeconds);
+      await load();
+      setShowCloudLibrary(false);
+      setNotice(`Cloud video attached: ${asset.fileName}`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not attach the cloud video.");
+    } finally {
+      setAttachingAssetId(null);
     }
   }
 
@@ -225,7 +260,7 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
     <input ref={fileRef} type="file" accept="video/*" className="hidden" onChange={(event) => void chooseVideo(event.target.files?.[0])}/>
     {notice || exporting ? <div role="status" className="fixed bottom-3 right-3 z-50 flex max-w-sm gap-3 rounded-lg border border-cyan-300/25 bg-pitch-950/95 px-3 py-2 text-xs text-cyan-100 shadow-2xl"><span>{exporting ? exportStatus : notice}</span>{!exporting ? <button onClick={() => setNotice(null)}><X size={14}/></button> : null}</div> : null}
 
-    <PlayerRail squad={match.squad} taggingPlayerIds={taggingPlayerIds} recentPlayerId={recentPlayerId} onTag={tagPlayer} onReorder={savePlayerLayout} videoControl={<Button size="sm" variant={uploading ? "danger" : "secondary"} onClick={() => uploading ? uploadAbort.current?.abort() : fileRef.current?.click()}>{uploading ? <Loader2 size={14} className="animate-spin"/> : <Upload size={14}/>} {uploading ? `Cancel · ${Math.round(uploadProgress * 100)}%` : match.video?.storageStatus === "READY" ? "Replace video" : match.video ? "Upload video" : "Select video"}</Button>}/>
+    <PlayerRail squad={match.squad} taggingPlayerIds={taggingPlayerIds} recentPlayerId={recentPlayerId} onTag={tagPlayer} onReorder={savePlayerLayout} videoControl={<div className="flex items-center gap-1.5"><Button size="sm" variant={uploading ? "danger" : "secondary"} onClick={() => uploading ? uploadAbort.current?.abort() : fileRef.current?.click()}>{uploading ? <Loader2 size={14} className="animate-spin"/> : <Upload size={14}/>} {uploading ? `Cancel · ${Math.round(uploadProgress * 100)}%` : "Upload new"}</Button><Button size="sm" variant="secondary" disabled={uploading} onClick={() => void openCloudLibrary()}><Cloud size={14}/>Cloud library</Button></div>}/>
     <div className="grid items-start gap-2 xl:grid-cols-[minmax(0,1fr)_19rem]">
       <div ref={videoPanelRef} className="min-w-0"><VideoPanel sourceUrl={sourceUrl} videoRef={videoRef} duration={duration} currentTime={currentTime} rate={rate} playing={playing} previewEnd={previewEnd} lastAction={lastAction} match={match} currentPeriod={currentPeriod} setDuration={setDuration} setCurrentTime={setCurrentTime} setPlaying={setPlaying} setPreviewEnd={setPreviewEnd} setRate={setRate} seekTo={seekTo} onChoose={() => fileRef.current?.click()} onDeleteLast={() => void removeLastAction(lastAction)} onSetPeriodMarker={setPeriodMarker} onEnded={() => { if (previewEnd === null && match.playerActions.length) setShowIdentifyPrompt(true); }}/></div>
       <RecordedOccurrences actions={filtered} players={players} sideStyle={sideStyle} filterPlayerId={filterPlayerId} exporting={exporting} onFilter={setFilterPlayerId} onPreview={preview} onDelete={removeAction} onExport={() => void exportActions(filtered)}/>
@@ -235,7 +270,19 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
     <Timeline players={players} actions={filtered} duration={timelineDuration} onSelect={preview}/>
 
     {showIdentifyPrompt ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"><Panel className="w-full max-w-md p-5"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-300/10 text-cyan-300"><Tags size={20}/></div><h2 className="mt-4 text-lg font-bold text-white">The video has finished</h2><p className="mt-2 text-sm text-slate-400">Do you want to identify the recorded subactions now?</p><div className="mt-5 flex justify-end gap-2"><Button onClick={() => setShowIdentifyPrompt(false)}>Not now</Button><Button variant="primary" onClick={() => router.push(`/analysis/${matchId}/subactions`)}><Tags size={15}/>Identify subactions</Button></div></Panel></div> : null}
+    {showCloudLibrary ? <CloudVideoLibrary assets={cloudAssets} loading={loadingCloudLibrary} attachingAssetId={attachingAssetId} onClose={() => !attachingAssetId && setShowCloudLibrary(false)} onSelect={(asset) => void attachSelectedCloudVideo(asset)}/> : null}
   </div>;
+}
+
+function CloudVideoLibrary({ assets, loading, attachingAssetId, onClose, onSelect }: { assets: CloudVideoAsset[]; loading: boolean; attachingAssetId: string | null; onClose: () => void; onSelect: (asset: CloudVideoAsset) => void }) {
+  return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"><Panel className="flex max-h-[80dvh] w-full max-w-2xl flex-col overflow-hidden"><div className="flex items-start justify-between gap-4 border-b border-white/10 p-4"><div><div className="flex items-center gap-2 text-cyan-200"><FolderOpen size={18}/><Label>Shared cloud library</Label></div><h2 className="mt-2 text-lg font-bold text-white">Choose an existing video</h2><p className="mt-1 text-xs text-slate-400">Only videos belonging to this workspace are shown. Selecting one does not upload another copy.</p></div><Button size="icon" variant="ghost" disabled={Boolean(attachingAssetId)} onClick={onClose} aria-label="Close cloud library"><X size={17}/></Button></div><div className="min-h-40 flex-1 overflow-y-auto p-3">{loading ? <div className="flex h-40 items-center justify-center gap-2 text-sm text-slate-400"><Loader2 size={18} className="animate-spin"/>Loading cloud videos…</div> : assets.length ? <div className="space-y-2">{assets.map((asset) => <button key={asset.id} type="button" disabled={Boolean(attachingAssetId)} onClick={() => onSelect(asset)} className="flex w-full items-center gap-3 rounded-md border border-white/10 bg-white/[.035] p-3 text-left transition hover:border-cyan-300/35 hover:bg-cyan-300/[.06] disabled:opacity-50"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-cyan-300/10 text-cyan-200">{attachingAssetId === asset.id ? <Loader2 size={18} className="animate-spin"/> : <FileVideo size={18}/>}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-white">{asset.fileName}</span><span className="mt-1 block text-xs text-slate-500">{formatFileSize(Number(asset.fileSize))} · {formatTime(asset.durationSeconds)}{asset.uploadedAt ? ` · ${new Date(asset.uploadedAt).toLocaleDateString()}` : ""}</span></span><span className="text-xs font-semibold text-cyan-200">Use video</span></button>)}</div> : <div className="flex h-40 flex-col items-center justify-center text-center"><Cloud size={30} className="text-slate-600"/><p className="mt-3 text-sm font-medium text-slate-300">No shared videos yet</p><p className="mt-1 text-xs text-slate-500">Use Upload new to add the first video to this workspace.</p></div>}</div></Panel></div>;
+}
+
+function formatFileSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  return `${(bytes / 1024 ** index).toFixed(index >= 3 ? 1 : 0)} ${units[index]}`;
 }
 
 type LineupGroup = PlayerPositionGroup | "substitutes";

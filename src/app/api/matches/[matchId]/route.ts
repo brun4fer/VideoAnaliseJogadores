@@ -3,6 +3,10 @@ import { requireManagementAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sortPlayersByPosition } from "@/lib/player-positions";
 import { periodMarkers, type PeriodMarkerKey, validatePeriodMarkers } from "@/lib/match-periods";
+import { removeMediaReference } from "@/lib/media-library";
+import { mediaPrisma } from "@/lib/media-prisma";
+import { abortMediaMultipartUpload } from "@/lib/media-r2";
+import { ensureMediaWorkspace } from "@/lib/media-workspace";
 import { abortMultipartUpload, deleteR2Object } from "@/lib/r2";
 import { serializeVideo } from "@/lib/video";
 
@@ -91,13 +95,24 @@ export async function PATCH(request: Request, context: { params: Promise<{ match
 
 export async function DELETE(_: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const { user, workspace } = await requireManagementAccount();
+    const account = await requireManagementAccount();
+    const { user, workspace } = account;
     const { matchId } = await context.params;
     const match = await prisma.match.findFirst({ where: { id: matchId, workspaceId: workspace.id }, include: { video: true } });
     if (!match) return ok({ deleted: true });
-    if (match.video?.ownerId === user.id && match.video.storageKey) {
-      if (match.video.uploadId) await abortMultipartUpload(match.video.storageKey, match.video.uploadId).catch(() => undefined);
-      await deleteR2Object(match.video.storageKey);
+    if (match.video?.ownerId === user.id) {
+      if (match.video.mediaAssetId) {
+        const { appId, mediaWorkspace } = await ensureMediaWorkspace(account);
+        const asset = await mediaPrisma.mediaAsset.findFirst({ where: { id: match.video.mediaAssetId, mediaWorkspaceId: mediaWorkspace.id } });
+        if (asset?.storageStatus === "UPLOADING" && asset.uploadId) {
+          await abortMediaMultipartUpload(asset.storageKey, asset.uploadId).catch(() => undefined);
+          await mediaPrisma.mediaAsset.update({ where: { id: asset.id }, data: { storageStatus: "FAILED", uploadId: null } });
+        }
+        await removeMediaReference(appId, match.video.id);
+      } else if (match.video.storageKey) {
+        if (match.video.uploadId) await abortMultipartUpload(match.video.storageKey, match.video.uploadId).catch(() => undefined);
+        await deleteR2Object(match.video.storageKey);
+      }
     }
     await prisma.match.delete({ where: { id: match.id } });
     return ok({ deleted: true });
