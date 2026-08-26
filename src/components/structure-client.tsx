@@ -8,6 +8,7 @@ import { playerPositionLabel } from "@/lib/player-positions";
 import { uploadStoredImage } from "@/lib/remote-image-store";
 import type { ImageResource } from "@/lib/image-storage";
 import { ManagementPasswordPanel } from "@/components/management-password-panel";
+import { MediaLibraryLinkPanel } from "@/components/media-library-link-panel";
 
 type Player = { id: string; name: string; shirtNumber: number | null; photoUrl: string | null; position: string | null; isGoalkeeper: boolean };
 type Club = { id: string; name: string; shortName: string | null; badgeUrl: string | null; players?: Player[]; competitions?: Array<{ id: string; name: string }> };
@@ -104,6 +105,7 @@ export function StructureClient() {
     <div><Label>Private setup</Label><h1 className="mt-2 text-3xl font-bold text-white">Team, competitions and opponents</h1><p className="mt-2 text-sm text-slate-400">The client team is always analysed and is the only team that can have players. Every other team is an opponent.</p></div>
     {notice ? <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">{notice}</div> : null}
     <ManagementPasswordPanel/>
+    <MediaLibraryLinkPanel/>
     <Panel className="p-5">
       <div className="flex items-center gap-3"><ClubBadge club={data.clientClub}/><div><Label>Client team</Label><h2 className="mt-1 text-xl font-bold text-white">{data.clientClub?.name || "Set up the team that will always be analysed"}</h2></div></div>
       <form key={data.clientClub?.id || "new-client"} className="mt-5 grid gap-3 md:grid-cols-[1fr_.45fr_1fr_auto] md:items-start" onSubmit={(event) => void submit(event, "clientClub")}>
