@@ -13,7 +13,7 @@ import { matchPeriodLabel } from "@/lib/match-periods";
 import { getRemoteVideoUrl } from "@/lib/remote-video-store";
 import { formatTime, roundTime } from "@/lib/time";
 import { Pitch, type Coordinate } from "@/components/pitch";
-import { Badge, Button, Label, Panel, Select } from "@/components/ui";
+import { Badge, Button, Input, Label, Panel, Select } from "@/components/ui";
 
 export function SubactionWorkspace({ matchId }: { matchId: string }) {
   const search = useSearchParams();
@@ -33,6 +33,8 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
   const [playing, setPlaying] = useState(false);
   const [rate, setRate] = useState(1);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingOccurrence, setEditingOccurrence] = useState<ActionRecord | null>(null);
+  const [occurrenceSaving, setOccurrenceSaving] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -199,6 +201,56 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
     }
   }
 
+  async function saveOccurrence(values: { playerId: string; eventTimeSeconds: number; startTimeSeconds: number; endTimeSeconds: number }) {
+    if (!match || !editingOccurrence) return;
+    setOccurrenceSaving(true);
+    setNotice(null);
+    try {
+      const saved = await apiFetch<ActionRecord>(`/api/actions/${editingOccurrence.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(values),
+      });
+      setMatch({
+        ...match,
+        playerActions: match.playerActions.map((action) => action.id === saved.id ? saved : action),
+      });
+      if (filterPlayerId !== "all" && filterPlayerId !== saved.playerId) setFilterPlayerId(saved.playerId);
+      playlistActiveRef.current = false;
+      resetEditor();
+      setSelectedId(saved.id);
+      setCurrentTime(saved.eventTimeSeconds);
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.currentTime = saved.eventTimeSeconds;
+      }
+      setEditingOccurrence(null);
+      setNotice("Player occurrence updated.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not update the player occurrence.");
+    } finally {
+      setOccurrenceSaving(false);
+    }
+  }
+
+  async function removeOccurrence(action: ActionRecord) {
+    if (!match || !confirm(`Delete ${action.player.name}'s occurrence and all its saved subactions?`)) return;
+    const index = occurrences.findIndex((item) => item.id === action.id);
+    const remaining = occurrences.filter((item) => item.id !== action.id);
+    const next = remaining.length ? remaining[Math.min(Math.max(index, 0), remaining.length - 1)] : null;
+    try {
+      await apiFetch(`/api/actions/${action.id}`, { method: "DELETE" });
+      playlistActiveRef.current = false;
+      videoRef.current?.pause();
+      setMatch({ ...match, playerActions: match.playerActions.filter((item) => item.id !== action.id) });
+      setSelectedId(next?.id || null);
+      setEditingOccurrence(null);
+      resetEditor();
+      setNotice("Player occurrence deleted.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not delete the player occurrence.");
+    }
+  }
+
   async function chooseVideo(file?: File) {
     if (!file) return;
     if (sourceUrl?.startsWith("blob:")) URL.revokeObjectURL(sourceUrl);
@@ -214,7 +266,7 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
   return <div className="flex min-h-0 flex-col gap-2 lg:h-[calc(100dvh-5rem)] lg:overflow-hidden">
     <input ref={fileRef} type="file" accept="video/*" className="hidden" onChange={(event) => void chooseVideo(event.target.files?.[0])}/>
 
-    {notice ? <div className="fixed bottom-4 right-4 z-50 flex max-w-sm items-center gap-3 rounded-lg border border-cyan-300/20 bg-slate-950/95 px-3 py-2 text-xs text-cyan-100 shadow-2xl">
+    {notice ? <div className="fixed bottom-4 right-4 z-[80] flex max-w-sm items-center gap-3 rounded-lg border border-cyan-300/20 bg-slate-950/95 px-3 py-2 text-xs text-cyan-100 shadow-2xl">
       <span>{notice}</span><button type="button" aria-label="Close message" onClick={() => setNotice(null)}><X size={13}/></button>
     </div> : null}
 
@@ -299,7 +351,17 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
       <Panel className="flex min-h-0 flex-col overflow-hidden p-2">
         <div className="flex shrink-0 items-center justify-between gap-2">
           <div className="min-w-0"><Label>Identify subaction</Label><p className="truncate text-[9px] text-slate-500">{selected ? `${selected.player.name} · ${formatTime(currentTime)}` : "Select an occurrence"}</p></div>
-          <Crosshair size={15} className="shrink-0 text-cyan-300"/>
+          <div className="flex shrink-0 items-center gap-0.5">
+            {selected ? <>
+              <button type="button" aria-label="Edit player occurrence" title="Edit player occurrence" onClick={() => {
+                playlistActiveRef.current = false;
+                videoRef.current?.pause();
+                setEditingOccurrence(selected);
+              }} className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-400 transition hover:bg-cyan-300/10 hover:text-cyan-200"><Pencil size={12}/></button>
+              <button type="button" aria-label="Delete player occurrence" title="Delete player occurrence" onClick={() => void removeOccurrence(selected)} className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-500 transition hover:bg-red-400/10 hover:text-red-200"><Trash2 size={12}/></button>
+            </> : null}
+            <Crosshair size={15} className="ml-1 shrink-0 text-cyan-300"/>
+          </div>
         </div>
 
         {selected ? <>
@@ -350,5 +412,98 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
         </> : <div className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-md border border-dashed border-white/10 text-center text-xs text-slate-500"><Tags className="mb-2"/>Select an occurrence.</div>}
       </Panel>
     </div>
+
+    {editingOccurrence ? <OccurrenceEditDialog
+      key={editingOccurrence.id}
+      action={editingOccurrence}
+      players={players}
+      currentTime={currentTime}
+      duration={match.video?.durationSeconds ? match.video.durationSeconds : undefined}
+      saving={occurrenceSaving}
+      onClose={() => setEditingOccurrence(null)}
+      onSave={saveOccurrence}
+    /> : null}
   </div>;
+}
+
+function OccurrenceEditDialog({ action, players, currentTime, duration, saving, onClose, onSave }: {
+  action: ActionRecord;
+  players: MatchDetail["squad"][number]["player"][];
+  currentTime: number;
+  duration?: number;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (values: { playerId: string; eventTimeSeconds: number; startTimeSeconds: number; endTimeSeconds: number }) => Promise<void>;
+}) {
+  const [playerId, setPlayerId] = useState(action.playerId);
+  const [eventTime, setEventTime] = useState(String(action.eventTimeSeconds));
+  const [startTime, setStartTime] = useState(String(action.startTimeSeconds));
+  const [endTime, setEndTime] = useState(String(action.endTimeSeconds));
+  const videoTime = String(roundTime(currentTime));
+
+  return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="edit-occurrence-title">
+    <Panel className="w-full max-w-lg overflow-hidden border-cyan-300/20 bg-slate-950 shadow-2xl">
+      <div className="flex items-start justify-between border-b border-white/10 px-5 py-4">
+        <div>
+          <Label>Edit player action</Label>
+          <h2 id="edit-occurrence-title" className="mt-1 text-lg font-bold text-white">Edit player occurrence</h2>
+          <p className="mt-1 text-xs text-slate-400">Correct the player and clip times. Saved subactions will be kept.</p>
+        </div>
+        <button type="button" aria-label="Close editor" onClick={onClose} disabled={saving} className="rounded p-1.5 text-slate-400 transition hover:bg-white/10 hover:text-white"><X size={16}/></button>
+      </div>
+
+      <form className="space-y-4 p-5" onSubmit={(event) => {
+        event.preventDefault();
+        void onSave({
+          playerId,
+          eventTimeSeconds: Number(eventTime),
+          startTimeSeconds: Number(startTime),
+          endTimeSeconds: Number(endTime),
+        });
+      }}>
+        <label className="block">
+          <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[.14em] text-slate-400">Player</span>
+          <Select value={playerId} onChange={(event) => setPlayerId(event.target.value)} disabled={saving}>
+            {players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
+          </Select>
+        </label>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <OccurrenceTimeField label="Clip start" value={startTime} onChange={setStartTime} disabled={saving} duration={duration}/>
+          <OccurrenceTimeField label="Action time" value={eventTime} onChange={setEventTime} disabled={saving} duration={duration}/>
+          <OccurrenceTimeField label="Clip end" value={endTime} onChange={setEndTime} disabled={saving} duration={duration}/>
+        </div>
+
+        <div className="rounded-md border border-white/10 bg-white/[.03] p-3">
+          <p className="text-[10px] text-slate-400">Current video position: <span className="font-mono text-cyan-200">{formatTime(currentTime)}</span></p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <Button type="button" size="sm" disabled={saving} onClick={() => setStartTime(videoTime)}>Use as start</Button>
+            <Button type="button" size="sm" disabled={saving} onClick={() => setEventTime(videoTime)}>Use as action</Button>
+            <Button type="button" size="sm" disabled={saving} onClick={() => setEndTime(videoTime)}>Use as end</Button>
+          </div>
+        </div>
+
+        <p className="text-[10px] leading-relaxed text-slate-500">The action time must be inside the clip. The clip must also continue to include every saved subaction.</p>
+        <div className="flex justify-end gap-2 border-t border-white/10 pt-4">
+          <Button type="button" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={saving || !playerId}>
+            {saving ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>}Save changes
+          </Button>
+        </div>
+      </form>
+    </Panel>
+  </div>;
+}
+
+function OccurrenceTimeField({ label, value, onChange, disabled, duration }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  duration?: number;
+}) {
+  return <label className="block">
+    <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[.14em] text-slate-400">{label}</span>
+    <Input type="number" min={0} max={duration} step={0.1} required value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} className="font-mono"/>
+  </label>;
 }
