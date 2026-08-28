@@ -58,3 +58,6 @@ export const goalkeeperActionTypes: ActionType[] = [
 export const allActionTypes = [...outfieldActionTypes, ...goalkeeperActionTypes];
 export const actionTypeByKey = new Map(allActionTypes.map((action) => [action.key, action]));
 export function actionsForPlayer(isGoalkeeper: boolean) { return isGoalkeeper ? [...goalkeeperActionTypes, ...outfieldActionTypes] : outfieldActionTypes; }
+export function actionResultColor(outcome?: string | null) {
+  return outcome === "positive" ? green : outcome === "negative" ? red : outcome === "neutral" ? amber : "#64748b";
+}

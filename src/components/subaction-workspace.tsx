@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronLeft, ChevronRight, Crosshair, FileVideo, Loader2, Pause, Pencil, Play, Save, Tags, Trash2, Upload, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { actionsForPlayer, actionTypeByKey, type ActionType } from "@/lib/action-types";
+import { actionResultColor, actionsForPlayer, actionTypeByKey, type ActionType } from "@/lib/action-types";
 import type { ActionRecord, MatchDetail, SubActionRecord } from "@/lib/domain";
 import { attackDirectionLabel } from "@/lib/field-normalization";
 import { apiFetch } from "@/lib/http";
@@ -304,7 +304,7 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
         <div className="min-h-0 flex-1 overflow-y-auto">
           {occurrences.length ? occurrences.map((action, index) => <button key={action.id} onClick={() => selectOccurrence(action)} className={`flex w-full items-center gap-1.5 border-b border-white/[.06] px-2 py-1.5 text-left transition hover:bg-white/[.06] ${selected?.id === action.id ? "bg-cyan-300/10" : ""}`}>
             <span className="w-4 shrink-0 text-right font-mono text-[8px] text-slate-600">{index + 1}</span>
-            <span className={`h-2 w-2 shrink-0 rounded-full ${action.subActions.length ? "bg-emerald-400" : "bg-amber-300"}`}/>
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: actionResultColor(action.subActions[0]?.outcome || actionTypeByKey.get(action.subActions[0]?.actionKey || "")?.outcome) }}/>
             <span className="min-w-0 flex-1"><span className="block truncate text-[10px] font-semibold text-white">{action.player.name}</span><span className="block font-mono text-[8px] text-slate-500">{formatTime(action.startTimeSeconds)}–{formatTime(action.endTimeSeconds)}</span></span>
             <Badge className="px-1 py-0 text-[8px]">{action.subActions.length}</Badge>
           </button>) : <p className="p-4 text-xs text-slate-500">No occurrences for this player.</p>}
@@ -379,7 +379,7 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
               setEditingId(null);
               setCoordinate(null);
               videoRef.current?.pause();
-            }} className={`h-6 truncate rounded border px-1 text-left text-[8px] font-semibold ${selectedType?.key === type.key ? "text-white" : "border-white/10 bg-white/[.04] text-slate-400 hover:bg-white/[.08]"}`} style={selectedType?.key === type.key ? { borderColor: type.color, backgroundColor: `${type.color}28` } : undefined}>{type.name}</button>)}
+            }} className={`h-6 truncate rounded border px-1 text-left text-[8px] font-semibold transition hover:brightness-125 ${selectedType?.key === type.key ? "text-white" : ""}`} style={{ borderColor: `${actionResultColor(type.outcome)}${selectedType?.key === type.key ? "ff" : "66"}`, backgroundColor: `${actionResultColor(type.outcome)}${selectedType?.key === type.key ? "28" : "0d"}`, color: selectedType?.key === type.key ? "#ffffff" : actionResultColor(type.outcome) }}>{type.name}</button>)}
           </div>
 
           <div className="mt-1 flex shrink-0 items-center justify-between"><Label className="text-[9px]">Location</Label>{coordinate ? <button type="button" className="text-[8px] text-slate-500 hover:text-white" onClick={() => setCoordinate(null)}>Clear point</button> : <span className="text-[8px] text-slate-600">Click on the field</span>}</div>
@@ -396,7 +396,7 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
             <div className="flex shrink-0 items-center justify-between"><Label className="text-[9px]">Saved subactions</Label><Badge className="px-1.5 py-0.5 text-[8px]">{selected.subActions.length}</Badge></div>
             <div className="mt-1 min-h-0 flex-1 overflow-y-auto">
               {selected.subActions.length ? selected.subActions.map((item) => <div key={item.id} className="mb-1 flex items-center gap-1 rounded bg-white/[.035] px-1.5 py-1">
-                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: actionTypeByKey.get(item.actionKey)?.color }}/>
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: actionResultColor(item.outcome || actionTypeByKey.get(item.actionKey)?.outcome) }}/>
                 <button className="min-w-0 flex-1 truncate text-left text-[9px] text-slate-300" onClick={() => {
                   if (videoRef.current) {
                     videoRef.current.currentTime = item.eventTimeSeconds;
