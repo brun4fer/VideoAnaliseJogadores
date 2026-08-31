@@ -57,6 +57,41 @@ export const goalkeeperActionTypes: ActionType[] = [
 
 export const allActionTypes = [...outfieldActionTypes, ...goalkeeperActionTypes];
 export const actionTypeByKey = new Map(allActionTypes.map((action) => [action.key, action]));
+
+export type ActionFilterGroup = {
+  key: string;
+  name: string;
+  actionKeys: string[];
+};
+
+export const actionFilterGroups: ActionFilterGroup[] = [
+  { key: "group:shortPass", name: "Short pass", actionKeys: ["shortPassSuccess", "shortPassFail"] },
+  { key: "group:longPass", name: "Long pass", actionKeys: ["longPassSuccess", "longPassFail"] },
+  { key: "group:cross", name: "Cross", actionKeys: ["crossSuccess", "crossFail"] },
+  { key: "group:individualAction", name: "Individual action", actionKeys: ["dribbleSuccess", "dribbleFail"] },
+  { key: "group:throwIn", name: "Throw-in", actionKeys: ["throwSuccess", "throwFail"] },
+  { key: "group:shot", name: "Shot", actionKeys: ["shotsOnTarget", "shotsOffTarget"] },
+  { key: "group:aerialDuel", name: "Aerial duel", actionKeys: ["aerialDuelSuccess", "aerialDuelFail"] },
+  { key: "group:defensiveDuel", name: "Defensive duel", actionKeys: ["defensiveDuelSuccess", "defensiveDuelFail"] },
+  { key: "group:setPieceCross", name: "Set-piece cross", actionKeys: ["setPieceCrossSuccess", "setPieceCrossFail"] },
+  { key: "group:foul", name: "Foul", actionKeys: ["foulsSuffered", "foulsCommitted"] },
+  { key: "group:save", name: "Goalkeeper save", actionKeys: ["saves", "incompleteSaves"] },
+];
+
+const actionFilterGroupByKey = new Map(actionFilterGroups.map((group) => [group.key, group]));
+const groupedActionKeys = new Set(actionFilterGroups.flatMap((group) => group.actionKeys));
+export const standaloneActionTypes = allActionTypes.filter((action) => !groupedActionKeys.has(action.key));
+
+export function actionMatchesFilter(actionKey: string, filterKey: string) {
+  if (filterKey === "all") return true;
+  return actionFilterGroupByKey.get(filterKey)?.actionKeys.includes(actionKey) ?? actionKey === filterKey;
+}
+
+export function actionFilterName(filterKey: string) {
+  if (filterKey === "all") return "All actions";
+  return actionFilterGroupByKey.get(filterKey)?.name || actionTypeByKey.get(filterKey)?.name || "All actions";
+}
+
 export function actionsForPlayer(isGoalkeeper: boolean) { return isGoalkeeper ? [...goalkeeperActionTypes, ...outfieldActionTypes] : outfieldActionTypes; }
 export function actionResultColor(outcome?: string | null) {
   return outcome === "positive" ? green : outcome === "negative" ? red : outcome === "neutral" ? amber : "#64748b";
