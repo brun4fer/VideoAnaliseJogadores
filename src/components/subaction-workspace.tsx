@@ -145,10 +145,10 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
     }
   }
 
-  function resetEditor() {
+  function resetEditor(keepCoordinate = false) {
     setEditingId(null);
     setSelectedType(null);
-    setCoordinate(null);
+    if (!keepCoordinate) setCoordinate(null);
   }
 
   async function saveSubaction() {
@@ -175,7 +175,8 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
             : [...action.subActions, saved].sort((a, b) => a.eventTimeSeconds - b.eventTimeSeconds),
         } : action),
       });
-      resetEditor();
+      if (saved.fieldX != null && saved.fieldY != null) setCoordinate({ x: saved.fieldX, y: saved.fieldY });
+      resetEditor(true);
       setNotice(`${saved.actionName} ${editingId ? "updated" : "saved"}.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not save the subaction.");
@@ -371,13 +372,12 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
           </div>
           {selected.period === null ? <p className="mt-1 shrink-0 text-[8px] leading-tight text-amber-100">Set the half limits in player tagging so this occurrence is assigned automatically.</p> : null}
 
-          <div className="mt-1 flex shrink-0 items-center justify-between"><Label className="text-[9px]">Action</Label>{editingId ? <button type="button" onClick={resetEditor} className="inline-flex items-center gap-1 text-[8px] text-cyan-200"><X size={9}/>Cancel edit</button> : null}</div>
+          <div className="mt-1 flex shrink-0 items-center justify-between"><Label className="text-[9px]">Action</Label>{editingId ? <button type="button" onClick={() => resetEditor()} className="inline-flex items-center gap-1 text-[8px] text-cyan-200"><X size={9}/>Cancel edit</button> : null}</div>
           <div className="mt-1 grid shrink-0 grid-cols-2 gap-1 xl:grid-cols-3">
             {types.map((type) => <button key={type.key} type="button" title={`${type.group}: ${type.name}`} onClick={() => {
               playlistActiveRef.current = false;
               setSelectedType(type);
               setEditingId(null);
-              setCoordinate(null);
               videoRef.current?.pause();
             }} className={`h-6 truncate rounded border px-1 text-left text-[8px] font-semibold transition hover:brightness-125 ${selectedType?.key === type.key ? "text-white" : ""}`} style={{ borderColor: `${actionResultColor(type.outcome)}${selectedType?.key === type.key ? "ff" : "66"}`, backgroundColor: `${actionResultColor(type.outcome)}${selectedType?.key === type.key ? "28" : "0d"}`, color: selectedType?.key === type.key ? "#ffffff" : actionResultColor(type.outcome) }}>{type.name}</button>)}
           </div>

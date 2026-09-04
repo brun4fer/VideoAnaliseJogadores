@@ -1,4 +1,5 @@
 import { ok, serverError } from "@/lib/api";
+import { resolveFieldLocation } from "@/lib/action-location";
 import { requireAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serializeVideo } from "@/lib/video";
@@ -21,6 +22,7 @@ export async function GET() {
       }] : [];
       return subActions.map((subAction) => ({
         ...subAction,
+        ...resolveFieldLocation(subAction, [...occurrence.subActions, occurrence], subAction.eventTimeSeconds),
         parentActionId: occurrence.id,
         sourceType: occurrence.subActions.length ? "subaction" as const : "occurrence" as const,
         matchId: occurrence.matchId,
