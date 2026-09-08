@@ -60,9 +60,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ match
       if (value !== null && !Number.isFinite(value)) return badRequest("Invalid match period marker.");
       markerData[key] = value;
     }
+    const markersChanged = Object.keys(markerData).length > 0;
     const nextMarkers = Object.fromEntries(periodMarkers.map(([key]) => [key, markerData[key] === undefined ? existing[key] : markerData[key]])) as Required<Record<PeriodMarkerKey, number | null>>;
-    try { validatePeriodMarkers(nextMarkers); }
-    catch (error) { return badRequest(error instanceof Error ? error.message : "Invalid match period markers."); }
+    if (markersChanged) {
+      try { validatePeriodMarkers(nextMarkers); }
+      catch (error) { return badRequest(error instanceof Error ? error.message : "Invalid match period markers."); }
+    }
 
     const updated = await prisma.$transaction(async (transaction) => {
       await transaction.match.update({ where: { id: existing.id }, data: {
@@ -78,7 +81,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ match
         const groupByPlayer = new Map(playerLayout?.map((item) => [item.playerId, item.group]));
         await transaction.matchSquad.createMany({ data: playerIds.map((playerId, sortOrder) => ({ matchId, playerId, sortOrder, lineupGroup: groupByPlayer.get(playerId) || null })) });
       }
-      if (Object.keys(markerData).length) {
+      if (markersChanged) {
         await transaction.playerAction.updateMany({ where: { matchId }, data: { period: null } });
         if (nextMarkers.firstHalfStartSeconds !== null && nextMarkers.firstHalfEndSeconds !== null) {
           await transaction.playerAction.updateMany({ where: { matchId, eventTimeSeconds: { gte: nextMarkers.firstHalfStartSeconds, lte: nextMarkers.firstHalfEndSeconds } }, data: { period: 1 } });
