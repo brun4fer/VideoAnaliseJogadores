@@ -35,6 +35,7 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
   const [playing, setPlaying] = useState(false);
   const [rate, setRate] = useState(1);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTime, setEditingTime] = useState("");
   const [editingOccurrence, setEditingOccurrence] = useState<ActionRecord | null>(null);
   const [occurrenceSaving, setOccurrenceSaving] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -101,6 +102,7 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
     const subaction = selected.subActions.find((item) => item.id === editId);
     if (!subaction) return;
     setEditingId(subaction.id);
+    setEditingTime(String(subaction.eventTimeSeconds));
     setSelectedType(actionTypeByKey.get(subaction.actionKey) || null);
     setCoordinate(subaction.fieldX != null && subaction.fieldY != null ? { x: subaction.fieldX, y: subaction.fieldY } : null);
     setCurrentTime(subaction.eventTimeSeconds);
@@ -150,6 +152,7 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
   function editSubaction(subaction: SubActionRecord) {
     playlistActiveRef.current = false;
     setEditingId(subaction.id);
+    setEditingTime(String(subaction.eventTimeSeconds));
     setSelectedType(actionTypeByKey.get(subaction.actionKey) || null);
     setCoordinate(subaction.fieldX != null && subaction.fieldY != null ? { x: subaction.fieldX, y: subaction.fieldY } : null);
     setCurrentTime(subaction.eventTimeSeconds);
@@ -161,16 +164,21 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
 
   function resetEditor(keepCoordinate = false) {
     setEditingId(null);
+    setEditingTime("");
     setSelectedType(null);
     if (!keepCoordinate) setCoordinate(null);
   }
 
   async function saveSubaction() {
     if (!match || !selected || !selectedType) return setNotice("Select the action to identify.");
+    const requestedTime = editingId && editingTime.trim() === "" ? Number.NaN : editingId ? Number(editingTime) : currentTime;
+    if (!Number.isFinite(requestedTime) || requestedTime < selected.startTimeSeconds || requestedTime > selected.endTimeSeconds) {
+      return setNotice(`Enter an action time between ${formatTime(selected.startTimeSeconds)} and ${formatTime(selected.endTimeSeconds)}.`);
+    }
     setSaving(true);
     setNotice(null);
     try {
-      const eventTimeSeconds = roundTime(Math.max(selected.startTimeSeconds, Math.min(selected.endTimeSeconds, currentTime)));
+      const eventTimeSeconds = roundTime(requestedTime);
       const saved = await apiFetch<SubActionRecord>(editingId ? `/api/subactions/${editingId}` : `/api/actions/${selected.id}/subactions`, {
         method: editingId ? "PATCH" : "POST",
         body: JSON.stringify({
@@ -393,10 +401,17 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
             {types.map((type) => <button key={type.key} type="button" title={`${type.group}: ${type.name}`} onClick={() => {
               playlistActiveRef.current = false;
               setSelectedType(type);
-              setEditingId(null);
               videoRef.current?.pause();
             }} className={`h-6 truncate rounded border px-1 text-left text-[8px] font-semibold transition hover:brightness-125 ${selectedType?.key === type.key ? "text-white" : ""}`} style={{ borderColor: `${actionResultColor(type.outcome)}${selectedType?.key === type.key ? "ff" : "66"}`, backgroundColor: `${actionResultColor(type.outcome)}${selectedType?.key === type.key ? "28" : "0d"}`, color: selectedType?.key === type.key ? "#ffffff" : actionResultColor(type.outcome) }}>{type.name}</button>)}
           </div>
+
+          {editingId ? <div className="mt-1.5 shrink-0 rounded border border-cyan-300/20 bg-cyan-300/[.05] p-2">
+            <div className="flex items-end gap-2">
+              <label className="min-w-0 flex-1"><Label className="text-[9px]">Action time (seconds)</Label><Input type="number" min={selected.startTimeSeconds} max={selected.endTimeSeconds} step={0.1} value={editingTime} onChange={(event) => setEditingTime(event.target.value)} className="mt-1 h-8 font-mono text-xs"/></label>
+              <Button type="button" size="sm" className="h-8 shrink-0 px-2 text-[9px]" onClick={() => setEditingTime(String(roundTime(currentTime)))}>Use video time</Button>
+            </div>
+            <div className="mt-1 flex items-center justify-between gap-2"><p className="text-[8px] text-slate-500">Allowed clip range: {formatTime(selected.startTimeSeconds)}–{formatTime(selected.endTimeSeconds)} · video at {formatTime(currentTime)}</p><button type="button" onClick={() => { videoRef.current?.pause(); setEditingOccurrence(selected); }} className="shrink-0 text-[8px] font-semibold text-cyan-200 hover:text-white">Edit clip range</button></div>
+          </div> : null}
 
           <div className="mt-1 flex shrink-0 items-center justify-between"><Label className="text-[9px]">Location</Label>{coordinate ? <button type="button" className="text-[8px] text-slate-500 hover:text-white" onClick={() => setCoordinate(null)}>Clear point</button> : <span className="text-[8px] text-slate-600">Click on the field</span>}</div>
           <Pitch compact className="mt-1 shrink-0" points={markers} value={coordinate} onChange={setCoordinate} onPointSelect={(id) => {
