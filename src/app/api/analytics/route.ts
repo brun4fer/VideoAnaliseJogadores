@@ -1,12 +1,14 @@
-import { ok, serverError } from "@/lib/api";
+import { badRequest, ok, serverError } from "@/lib/api";
 import { resolveFieldLocation } from "@/lib/action-location";
-import { requireAccount } from "@/lib/auth";
+import { requireAreaAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serializeVideo } from "@/lib/video";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { workspace } = await requireAccount();
+    const area = new URL(request.url).searchParams.get("area");
+    if (area !== "maps" && area !== "reports") return badRequest("Select a valid analytics area.");
+    const { workspace } = await requireAreaAccount(area);
     const [players, occurrences, matches, competitions] = await Promise.all([
       prisma.player.findMany({ where: { workspaceId: workspace.id, club: { isClientClub: true } }, orderBy: { name: "asc" }, include: { club: true } }),
       prisma.playerAction.findMany({ where: { match: { workspaceId: workspace.id } }, orderBy: { eventTimeSeconds: "asc" }, include: { subActions: { orderBy: { eventTimeSeconds: "asc" } }, player: { include: { club: true } }, match: { include: { club: true, opponentClub: true, competition: { include: { season: true } }, video: true } } } }),

@@ -7,6 +7,7 @@ import { Archive, ArrowLeft, ChevronLeft, ChevronRight, Clock3, Cloud, FileVideo
 import JSZip from "jszip";
 
 import { Badge, Button, Label, Panel } from "@/components/ui";
+import { useVideoKeyboardSeek, VideoFullscreenButton } from "@/components/video-controls";
 import { downloadBlob, safe } from "@/lib/action-video-export";
 import { actionResultColor, actionTypeByKey } from "@/lib/action-types";
 import type { ActionRecord, MatchDetail, PlayerRecord } from "@/lib/domain";
@@ -23,6 +24,7 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const videoPanelRef = useRef<HTMLDivElement | null>(null);
+  const videoWorkspaceRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const flashTimer = useRef<number | null>(null);
   const uploadAbort = useRef<AbortController | null>(null);
@@ -59,7 +61,7 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
     load().then(async (data) => {
       if (!active) return;
       if (data?.video?.storageStatus === "READY") {
-        const remote = await getRemoteVideoUrl(matchId).catch(() => null);
+        const remote = await getRemoteVideoUrl(matchId, "analysis").catch(() => null);
         if (active && remote) { setSourceUrl(remote.url); setDuration(data.video!.durationSeconds); return; }
       }
       const file = await getRememberedMatchVideo(matchId).catch(() => null);
@@ -96,7 +98,7 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
     try {
       const result = await uploadMatchVideo(matchId, file, ({ progress, detail }) => { setUploadProgress(progress); setNotice(`${detail} ${Math.round(progress * 100)}%`); }, controller.signal);
       setDuration(result.durationSeconds);
-      const remote = await getRemoteVideoUrl(matchId);
+      const remote = await getRemoteVideoUrl(matchId, "analysis");
       setSourceUrl(remote.url);
       await load();
       setNotice(result.resumed ? "Video upload resumed and completed successfully." : "Video stored securely in Cloudflare R2.");
@@ -128,7 +130,7 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
     setAttachingAssetId(asset.id);
     try {
       await attachCloudVideo(matchId, asset.id);
-      const remote = await getRemoteVideoUrl(matchId);
+      const remote = await getRemoteVideoUrl(matchId, "analysis");
       setSourceUrl(remote.url);
       setDuration(asset.durationSeconds);
       await load();
@@ -149,6 +151,8 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
     video.currentTime = next;
     setCurrentTime(next);
   }
+
+  useVideoKeyboardSeek(videoRef, seekTo, Boolean(sourceUrl));
 
   async function tagPlayer(player: PlayerRecord) {
     if (!sourceUrl) return setNotice("Select this match video first.");
@@ -213,7 +217,7 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
   async function exportActions(actions: ActionRecord[]) {
     if (!match || !actions.length || exporting) return;
     const localFile = await getRememberedMatchVideo(match.id).catch(() => null);
-    const source = localFile || (match.video?.storageStatus === "READY" ? (await getRemoteVideoUrl(match.id).catch(() => null))?.url : null);
+    const source = localFile || (match.video?.storageStatus === "READY" ? (await getRemoteVideoUrl(match.id, "analysis").catch(() => null))?.url : null);
     if (!source) return setNotice("Upload this match video before exporting clips.");
     let directory = null;
     try { directory = await pickExportDirectory(); }
@@ -265,8 +269,8 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
     {notice || exporting ? <div role="status" className="fixed bottom-3 right-3 z-50 flex max-w-sm gap-3 rounded-lg border border-cyan-300/25 bg-pitch-950/95 px-3 py-2 text-xs text-cyan-100 shadow-2xl"><span>{exporting ? exportStatus : notice}</span>{!exporting ? <button onClick={() => setNotice(null)}><X size={14}/></button> : null}</div> : null}
 
     <PlayerRail squad={match.squad} taggingPlayerIds={taggingPlayerIds} recentPlayerId={recentPlayerId} onTag={tagPlayer} onReorder={savePlayerLayout} videoControl={<div className="flex items-center gap-1"><Button size="icon" className="h-7 w-7" variant={uploading ? "danger" : "secondary"} title={uploading ? `Cancel upload (${Math.round(uploadProgress * 100)}%)` : "Upload new video"} aria-label={uploading ? "Cancel video upload" : "Upload new video"} onClick={() => uploading ? uploadAbort.current?.abort() : fileRef.current?.click()}>{uploading ? <Loader2 size={12} className="animate-spin"/> : <Upload size={12}/>}</Button><Button size="icon" className="h-7 w-7" variant="secondary" title="Open cloud library" aria-label="Open cloud library" disabled={uploading} onClick={() => void openCloudLibrary()}><Cloud size={12}/></Button></div>}/>
-    <div className="grid items-start gap-2 xl:grid-cols-[minmax(0,1fr)_19rem]">
-      <div ref={videoPanelRef} className="min-w-0"><VideoPanel sourceUrl={sourceUrl} videoRef={videoRef} duration={duration} currentTime={currentTime} rate={rate} playing={playing} previewEnd={previewEnd} lastAction={lastAction} match={match} currentPeriod={currentPeriod} setDuration={setDuration} setCurrentTime={setCurrentTime} setPlaying={setPlaying} setPreviewEnd={setPreviewEnd} setRate={setRate} seekTo={seekTo} onChoose={() => fileRef.current?.click()} onDeleteLast={() => void removeLastAction(lastAction)} onSetPeriodMarker={setPeriodMarker} identificationControl={<Button size="sm" variant="primary" className="h-8 whitespace-nowrap px-2 text-[10px]" disabled={!match.playerActions.length} onClick={() => router.push(`/analysis/${matchId}/subactions`)}><Tags size={13}/>Identify subactions</Button>} onEnded={() => { if (previewEnd === null && match.playerActions.length) setShowIdentifyPrompt(true); }}/></div>
+    <div ref={videoWorkspaceRef} data-video-workspace className="grid items-start gap-2 xl:grid-cols-[minmax(0,1fr)_19rem]">
+      <div ref={videoPanelRef} className="min-w-0"><VideoPanel sourceUrl={sourceUrl} videoRef={videoRef} duration={duration} currentTime={currentTime} rate={rate} playing={playing} previewEnd={previewEnd} lastAction={lastAction} match={match} currentPeriod={currentPeriod} setDuration={setDuration} setCurrentTime={setCurrentTime} setPlaying={setPlaying} setPreviewEnd={setPreviewEnd} setRate={setRate} seekTo={seekTo} onChoose={() => fileRef.current?.click()} onDeleteLast={() => void removeLastAction(lastAction)} onSetPeriodMarker={setPeriodMarker} identificationControl={<><VideoFullscreenButton targetRef={videoWorkspaceRef}/><Button size="sm" variant="primary" className="h-8 whitespace-nowrap px-2 text-[10px]" disabled={!match.playerActions.length} onClick={() => router.push(`/analysis/${matchId}/subactions`)}><Tags size={13}/>Identify subactions</Button></>} onEnded={() => { if (previewEnd === null && match.playerActions.length) setShowIdentifyPrompt(true); }}/></div>
       <RecordedOccurrences actions={filtered} players={players} sideStyle={sideStyle} filterPlayerId={filterPlayerId} exporting={exporting} onFilter={setFilterPlayerId} onPreview={preview} onDelete={removeAction} onExport={() => void exportActions(filtered)}/>
     </div>
 

@@ -18,7 +18,7 @@ type Competition = { id: string; name: string; season: { name: string } };
 type OutcomeFilter = "positive" | "negative" | "neutral";
 export function MapsClient() {
   const [data, setData] = useState<{ players: Player[]; actions: MapAction[]; matches: Match[]; competitions: Competition[] }>({ players: [], actions: [], matches: [], competitions: [] }); const [playerId, setPlayerId] = useState("all"); const [actionKey, setActionKey] = useState("all"); const [competitionId, setCompetitionId] = useState("all"); const [matchIds, setMatchIds] = useState<string[]>([]); const [matchSelectionMade, setMatchSelectionMade] = useState(false); const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter | null>(null); const [selectedId, setSelectedId] = useState<string | null>(null); const [playbackRequest, setPlaybackRequest] = useState(0);
-  useEffect(() => { apiFetch<typeof data>("/api/analytics").then(setData).catch(() => undefined); }, []);
+  useEffect(() => { apiFetch<typeof data>("/api/analytics?area=maps").then(setData).catch(() => undefined); }, []);
   const availableMatches = useMemo(() => data.matches.filter((match) => competitionId === "all" || match.competition.id === competitionId), [competitionId, data.matches]);
   useEffect(() => { setMatchIds((current) => { const next = current.filter((id) => availableMatches.some((match) => match.id === id)); return next.length === current.length ? current : next; }); }, [availableMatches]);
   const locatedActions = useMemo(() => matchSelectionMade ? data.actions.filter((action) => action.fieldX != null && action.fieldY != null && (playerId === "all" || action.playerId === playerId) && actionMatchesFilter(action.actionKey, actionKey) && (competitionId === "all" || action.match.competition.id === competitionId) && (!matchIds.length || matchIds.includes(action.matchId))) : [], [data.actions, playerId, actionKey, competitionId, matchIds, matchSelectionMade]);
@@ -38,8 +38,8 @@ export function MapsClient() {
     {unassignedCount ? <div className="rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs text-amber-100">{unassignedCount} located {unassignedCount === 1 ? "action is" : "actions are"} waiting for the match period markers and will appear automatically afterwards.</div> : null}
     <div className="relative z-0 grid items-start gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,.65fr)]">
       <Panel className="p-4"><div className="flex items-center justify-between"><div><Label>Pitch</Label><p className="mt-1 text-xs text-slate-500">{matchSelectionMade ? `${actions.length} located actions · select a point to play its sequence` : "Select at least one match above to display its actions."}</p></div><MapPinned className="text-cyan-300"/></div><Pitch className="mt-4" points={points} onPointSelect={selectPoint}/></Panel>
-      <div className="space-y-3">
-        <ActionClipPlayer key={playbackRequest} action={selected} onClipEnd={selectedIndex >= 0 && selectedIndex < playlistActions.length - 1 ? () => setSelectedId(playlistActions[selectedIndex + 1].id) : undefined}/>
+      <div data-video-workspace className="space-y-3">
+        <ActionClipPlayer key={playbackRequest} area="maps" action={selected} onClipEnd={selectedIndex >= 0 && selectedIndex < playlistActions.length - 1 ? () => setSelectedId(playlistActions[selectedIndex + 1].id) : undefined}/>
         <Panel className="overflow-hidden">
           <div className="border-b border-white/10 p-3">
             <div className="flex items-center justify-between gap-2"><div className="min-w-0"><Label>{outcomeFilter ? `${outcomeLabel(outcomeFilter)} playlist` : "Action playlist"}</Label><p className="mt-1 truncate text-xs text-slate-500">Clips matching the active map filters</p></div><Badge>{playlistActions.length}</Badge></div>

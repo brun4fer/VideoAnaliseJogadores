@@ -1,16 +1,21 @@
 import { badRequest, forbidden, notFound, ok, serverError } from "@/lib/api";
-import { requireAccount, requireManagementAccount } from "@/lib/auth";
+import { requireAreaAccount } from "@/lib/auth";
 import { removeMediaReference } from "@/lib/media-library";
 import { mediaPrisma } from "@/lib/media-prisma";
-import { abortMediaMultipartUpload, createMediaPlaybackUrl } from "@/lib/media-r2";
+import { abortMediaMultipartUpload, createMediaDownloadUrl, createMediaPlaybackUrl } from "@/lib/media-r2";
 import { ensureMediaWorkspace } from "@/lib/media-workspace";
 import { prisma } from "@/lib/prisma";
-import { abortMultipartUpload, createPlaybackUrl, deleteR2Object } from "@/lib/r2";
+import { abortMultipartUpload, createDownloadUrl, createPlaybackUrl, deleteR2Object } from "@/lib/r2";
 import { serializeVideo } from "@/lib/video";
 
-export async function GET(_: Request, context: { params: Promise<{ matchId: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const account = await requireAccount();
+    const parameters = new URL(request.url).searchParams;
+    const download = parameters.get("download") === "1";
+    const area = parameters.get("area");
+    if (area !== "maps" && area !== "reports" && area !== "analysis") return badRequest("Select a valid video access area.");
+    if (download && area !== "reports") return forbidden("Full match downloads are available from Reports.");
+    const account = await requireAreaAccount(area);
     const { user, workspace } = account;
     const { matchId } = await context.params;
     const match = await prisma.match.findFirst({ where: { id: matchId, workspaceId: workspace.id }, include: { video: true } });
@@ -20,17 +25,17 @@ export async function GET(_: Request, context: { params: Promise<{ matchId: stri
       const { mediaWorkspace } = await ensureMediaWorkspace(account);
       const asset = await mediaPrisma.mediaAsset.findFirst({ where: { id: match.video.mediaAssetId, mediaWorkspaceId: mediaWorkspace.id, storageStatus: "READY" } });
       if (!asset) return notFound("The shared cloud video is not available.");
-      return ok(createMediaPlaybackUrl(asset.storageKey));
+      return ok(download ? createMediaDownloadUrl(asset.storageKey, match.video.fileName) : createMediaPlaybackUrl(asset.storageKey));
     }
     if (match.video.storageStatus !== "READY" || !match.video.storageKey) return notFound("The video has not been uploaded to Cloudflare R2 yet.");
-    return ok(createPlaybackUrl(match.video.storageKey));
+    return ok(download ? createDownloadUrl(match.video.storageKey, match.video.fileName) : createPlaybackUrl(match.video.storageKey));
   } catch (error) { return serverError(error); }
 }
 
 // Retained for legacy clients that only register a local file's metadata.
 export async function PUT(request: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const account = await requireManagementAccount();
+    const account = await requireAreaAccount("analysis");
     const { user, workspace } = account;
     const { matchId } = await context.params;
     const body = await request.json();
@@ -53,7 +58,7 @@ export async function PUT(request: Request, context: { params: Promise<{ matchId
 
 export async function DELETE(_: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const account = await requireManagementAccount();
+    const account = await requireAreaAccount("analysis");
     const { user, workspace } = account;
     const { matchId } = await context.params;
     const match = await prisma.match.findFirst({ where: { id: matchId, workspaceId: workspace.id }, include: { video: true } });

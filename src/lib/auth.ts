@@ -1,6 +1,7 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { accessAreaDetails, globalAccessDefaultPassword, type AccessArea } from "@/lib/access-areas";
 
 export const SESSION_COOKIE = "player_analysis_session";
 const SESSION_DAYS = 7;
@@ -11,6 +12,15 @@ export class AuthError extends Error {
 
 export class ManagementAccessError extends Error {
   constructor(message = "Enter the management password to access this area.") { super(message); this.name = "ManagementAccessError"; }
+}
+
+export class AreaAccessError extends Error {
+  areas: AccessArea[];
+  constructor(areas: AccessArea[], message = "Enter the password for this area or the global password to continue.") {
+    super(message);
+    this.name = "AreaAccessError";
+    this.areas = areas;
+  }
 }
 
 export function hashPassword(password: string) {
@@ -27,6 +37,10 @@ export function verifyPassword(password: string, stored: string) {
 
 export function validatePassword(password: string) {
   if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) throw new Error("The password must contain at least 8 characters, one letter and one number.");
+}
+
+export function validateAccessPassword(password: string) {
+  if (password.length < 4) throw new Error("The password must contain at least 4 characters.");
 }
 
 function tokenHash(token: string) { return createHash("sha256").update(token).digest("hex"); }
@@ -56,5 +70,45 @@ export async function requireManagementAccount() {
   const account = await requireAccount();
   if (!account.workspace.managementPasswordHash) throw new ManagementAccessError("Create the management password before accessing this area.");
   if (!account.session.managementUnlockedAt) throw new ManagementAccessError();
+  return account;
+}
+
+type Account = Awaited<ReturnType<typeof requireAccount>>;
+
+export function accessPasswordHash(account: Account, area: AccessArea) {
+  switch (area) {
+    case "matches": return account.workspace.matchesAccessPasswordHash;
+    case "newMatch": return account.workspace.newMatchAccessPasswordHash;
+    case "maps": return account.workspace.mapsAccessPasswordHash;
+    case "reports": return account.workspace.reportsAccessPasswordHash;
+    case "squad": return account.workspace.squadAccessPasswordHash;
+    case "analysis": return account.workspace.analysisAccessPasswordHash;
+  }
+}
+
+export function verifyAreaPassword(account: Account, area: AccessArea, password: string) {
+  const stored = accessPasswordHash(account, area);
+  return stored ? verifyPassword(password, stored) : password === accessAreaDetails[area].defaultPassword;
+}
+
+export function verifyGlobalAccessPassword(account: Account, password: string) {
+  const stored = account.workspace.globalAccessPasswordHash;
+  return stored ? verifyPassword(password, stored) : password === globalAccessDefaultPassword;
+}
+
+export function hasAreaAccess(account: Account, area: AccessArea) {
+  return Boolean(account.session.globalAccessUnlockedAt || account.session.unlockedAccessAreas.includes(area));
+}
+
+export async function requireAreaAccount(area: AccessArea | AccessArea[]) {
+  const account = await requireAccount();
+  const areas = Array.isArray(area) ? area : [area];
+  if (!areas.some((item) => hasAreaAccess(account, item))) throw new AreaAccessError(areas);
+  return account;
+}
+
+export async function requireGlobalAccessAccount() {
+  const account = await requireAccount();
+  if (!account.session.globalAccessUnlockedAt) throw new AreaAccessError([], "Enter the global password to manage access passwords.");
   return account;
 }

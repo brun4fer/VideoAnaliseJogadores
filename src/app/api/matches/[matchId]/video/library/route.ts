@@ -1,5 +1,5 @@
 import { badRequest, notFound, ok, serverError } from "@/lib/api";
-import { requireManagementAccount } from "@/lib/auth";
+import { requireAreaAccount } from "@/lib/auth";
 import { setMediaReference } from "@/lib/media-library";
 import { mediaPrisma } from "@/lib/media-prisma";
 import { ensureMediaWorkspace } from "@/lib/media-workspace";
@@ -8,7 +8,7 @@ import { serializeVideo } from "@/lib/video";
 
 export async function POST(request: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const account = await requireManagementAccount();
+    const account = await requireAreaAccount(["analysis", "newMatch"]);
     const { user, workspace } = account;
     const { appId, mediaWorkspace } = await ensureMediaWorkspace(account);
     const { matchId } = await context.params;

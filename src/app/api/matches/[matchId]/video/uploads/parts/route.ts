@@ -1,5 +1,5 @@
 import { badRequest, forbidden, ok, serverError } from "@/lib/api";
-import { requireManagementAccount } from "@/lib/auth";
+import { requireAreaAccount } from "@/lib/auth";
 import { mediaPrisma } from "@/lib/media-prisma";
 import { presignMediaMultipartParts } from "@/lib/media-r2";
 import { ensureMediaWorkspace } from "@/lib/media-workspace";
@@ -8,7 +8,7 @@ import { presignMultipartParts } from "@/lib/r2";
 
 export async function POST(request: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const account = await requireManagementAccount();
+    const account = await requireAreaAccount(["analysis", "newMatch"]);
     const { user, workspace } = account;
     const { mediaWorkspace } = await ensureMediaWorkspace(account);
     const { matchId } = await context.params;

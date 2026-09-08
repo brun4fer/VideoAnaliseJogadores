@@ -1,13 +1,13 @@
 import { actionsForPlayer, actionTypeByKey } from "@/lib/action-types";
 import { badRequest, ok, serverError } from "@/lib/api";
 import { resolveFieldLocation } from "@/lib/action-location";
-import { requireManagementAccount } from "@/lib/auth";
+import { requireAreaAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { roundTime } from "@/lib/time";
 
 export async function POST(request: Request, context: { params: Promise<{ actionId: string }> }) {
   try {
-    const { workspace } = await requireManagementAccount();
+    const { workspace } = await requireAreaAccount("analysis");
     const { actionId } = await context.params;
     const body = await request.json();
     const occurrence = await prisma.playerAction.findFirst({ where: { id: actionId, match: { workspaceId: workspace.id } }, include: { player: true, subActions: true } });

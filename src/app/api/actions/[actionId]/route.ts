@@ -1,13 +1,13 @@
 import { actionsForPlayer } from "@/lib/action-types";
 import { badRequest, ok, serverError } from "@/lib/api";
-import { requireManagementAccount } from "@/lib/auth";
+import { requireAreaAccount } from "@/lib/auth";
 import { getMatchPeriodAtTime } from "@/lib/match-periods";
 import { prisma } from "@/lib/prisma";
 import { roundTime } from "@/lib/time";
 
 export async function PATCH(request: Request, context: { params: Promise<{ actionId: string }> }) {
   try {
-    const { workspace } = await requireManagementAccount();
+    const { workspace } = await requireAreaAccount("analysis");
     const { actionId } = await context.params;
     const body = await request.json();
     const existing = await prisma.playerAction.findFirst({
@@ -53,6 +53,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ actio
 }
 
 export async function DELETE(_: Request, context: { params: Promise<{ actionId: string }> }) {
-  try { const { workspace } = await requireManagementAccount(); const { actionId } = await context.params; await prisma.playerAction.deleteMany({ where: { id: actionId, match: { workspaceId: workspace.id } } }); return ok({ deleted: true }); }
+  try { const { workspace } = await requireAreaAccount(["analysis", "reports"]); const { actionId } = await context.params; await prisma.playerAction.deleteMany({ where: { id: actionId, match: { workspaceId: workspace.id } } }); return ok({ deleted: true }); }
   catch (error) { return serverError(error); }
 }

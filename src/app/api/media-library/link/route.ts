@@ -1,10 +1,10 @@
 import { badRequest, ok, serverError } from "@/lib/api";
-import { requireManagementAccount } from "@/lib/auth";
+import { requireAreaAccount } from "@/lib/auth";
 import { claimMediaLinkToken, createMediaLinkToken, getMediaLinkStatus } from "@/lib/media-link";
 
 export async function GET() {
   try {
-    return ok(await getMediaLinkStatus(await requireManagementAccount()));
+    return ok(await getMediaLinkStatus(await requireAreaAccount("squad")));
   } catch (error) {
     return serverError(error);
   }
@@ -12,7 +12,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const account = await requireManagementAccount();
+    const account = await requireAreaAccount("squad");
     const body = await request.json();
     if (body.action === "create") return ok(await createMediaLinkToken(account), 201);
     if (body.action === "claim") return ok(await claimMediaLinkToken(account, typeof body.token === "string" ? body.token : ""));

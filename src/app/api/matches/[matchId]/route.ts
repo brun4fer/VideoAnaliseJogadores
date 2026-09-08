@@ -1,5 +1,5 @@
 import { badRequest, notFound, ok, serverError } from "@/lib/api";
-import { requireManagementAccount } from "@/lib/auth";
+import { requireAreaAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sortPlayersByPosition } from "@/lib/player-positions";
 import { periodMarkers, type PeriodMarkerKey, validatePeriodMarkers } from "@/lib/match-periods";
@@ -24,7 +24,7 @@ type LineupGroup = typeof lineupGroups[number];
 
 export async function GET(_: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const { workspace } = await requireManagementAccount();
+    const { workspace } = await requireAreaAccount(["analysis", "matches"]);
     const { matchId } = await context.params;
     const match = await prisma.match.findFirst({ where: { id: matchId, workspaceId: workspace.id }, include: matchInclude });
     if (!match) return notFound("Match not found.");
@@ -36,7 +36,7 @@ export async function GET(_: Request, context: { params: Promise<{ matchId: stri
 
 export async function PATCH(request: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const { workspace } = await requireManagementAccount();
+    const { workspace } = await requireAreaAccount(["analysis", "matches"]);
     const { matchId } = await context.params;
     const body = await request.json();
     const existing = await prisma.match.findFirst({ where: { id: matchId, workspaceId: workspace.id } });
@@ -98,7 +98,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ match
 
 export async function DELETE(_: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const account = await requireManagementAccount();
+    const account = await requireAreaAccount("matches");
     const { user, workspace } = account;
     const { matchId } = await context.params;
     const match = await prisma.match.findFirst({ where: { id: matchId, workspaceId: workspace.id }, include: { video: true } });

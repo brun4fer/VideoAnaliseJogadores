@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { badRequest, forbidden, ok, serverError } from "@/lib/api";
-import { requireManagementAccount } from "@/lib/auth";
+import { requireAreaAccount } from "@/lib/auth";
 import { setMediaReference } from "@/lib/media-library";
 import { mediaPrisma } from "@/lib/media-prisma";
 import { abortMediaMultipartUpload, createMediaMultipartUpload, listMediaMultipartParts } from "@/lib/media-r2";
@@ -20,7 +20,7 @@ function partSizeFor(fileSize: number) {
 export async function POST(request: Request, context: { params: Promise<{ matchId: string }> }) {
   let created: { id: string; key: string; uploadId: string } | null = null;
   try {
-    const account = await requireManagementAccount();
+    const account = await requireAreaAccount(["analysis", "newMatch"]);
     const { user, workspace } = account;
     const { appId, mediaWorkspace } = await ensureMediaWorkspace(account);
     const { matchId } = await context.params;
@@ -117,7 +117,7 @@ export async function POST(request: Request, context: { params: Promise<{ matchI
 
 export async function DELETE(request: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
-    const account = await requireManagementAccount();
+    const account = await requireAreaAccount(["analysis", "newMatch"]);
     const { user, workspace } = account;
     const { mediaWorkspace } = await ensureMediaWorkspace(account);
     const { matchId } = await context.params;

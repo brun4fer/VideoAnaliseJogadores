@@ -14,3 +14,41 @@ video { background: #020808; }
 ::-webkit-scrollbar-thumb { background: rgba(148,163,184,.28); border-radius: 999px; }
 ::-webkit-scrollbar-track { background: transparent; }
 .player-card:hover img { transform: scale(1.04); }
+
+[data-video-workspace]:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  overflow: auto;
+  padding: 1rem;
+  background: #061111;
+}
+
+@media (min-width: 768px) {
+  [data-video-workspace]:fullscreen {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  [data-video-workspace]:fullscreen > * {
+    min-height: 0;
+    max-height: calc(100vh - 2rem);
+  }
+
+  [data-video-workspace]:fullscreen [data-clip-player],
+  [data-video-workspace]:fullscreen [data-clip-player] > * {
+    height: 100%;
+  }
+
+  [data-video-workspace]:fullscreen [data-video-stage] {
+    flex: 1 1 0%;
+    aspect-ratio: auto;
+  }
+}
+
+@media (min-width: 1024px) {
+  [data-video-workspace][data-video-layout="three"]:fullscreen {
+    grid-template-columns: 13rem minmax(0, 1fr) 20rem;
+  }
+}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, Crosshair, FileVideo, Loader2, Pause, Pencil, Play, Save, Tags, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Crosshair, FastForward, FileVideo, Loader2, Pause, Pencil, Play, Rewind, Save, Tags, Trash2, Upload, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { actionResultColor, actionsForPlayer, actionTypeByKey, type ActionType } from "@/lib/action-types";
 import type { ActionRecord, MatchDetail, SubActionRecord } from "@/lib/domain";
@@ -14,10 +14,12 @@ import { getRemoteVideoUrl } from "@/lib/remote-video-store";
 import { formatTime, roundTime } from "@/lib/time";
 import { Pitch, type Coordinate } from "@/components/pitch";
 import { Badge, Button, Input, Label, Panel, Select } from "@/components/ui";
+import { useVideoKeyboardSeek, VideoFullscreenButton } from "@/components/video-controls";
 
 export function SubactionWorkspace({ matchId }: { matchId: string }) {
   const search = useSearchParams();
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoWorkspaceRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const playlistActiveRef = useRef(false);
   const advancingRef = useRef(false);
@@ -44,7 +46,7 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
       const requested = search.get("action");
       setSelectedId(data.playerActions.some((item) => item.id === requested) ? requested : data.playerActions[0]?.id || null);
       if (data.video?.storageStatus === "READY") {
-        const remote = await getRemoteVideoUrl(matchId).catch(() => null);
+        const remote = await getRemoteVideoUrl(matchId, "analysis").catch(() => null);
         if (remote) {
           setSourceUrl(remote.url);
           return;
@@ -132,6 +134,18 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
     }
     void video.play();
   }
+
+  function seekTo(seconds: number) {
+    const video = videoRef.current;
+    if (!video || !selected) return;
+    const next = Math.max(selected.startTimeSeconds, Math.min(selected.endTimeSeconds, seconds));
+    advancingRef.current = false;
+    playlistActiveRef.current = false;
+    video.currentTime = next;
+    setCurrentTime(next);
+  }
+
+  useVideoKeyboardSeek(videoRef, seekTo, Boolean(sourceUrl && selected));
 
   function editSubaction(subaction: SubActionRecord) {
     playlistActiveRef.current = false;
@@ -297,7 +311,7 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
       <Button size="sm" className="h-8" onClick={() => fileRef.current?.click()}><Upload size={13}/>{sourceUrl ? "Change video" : "Select video"}</Button>
     </Panel>
 
-    <div className="grid min-h-0 flex-1 items-stretch gap-2 lg:grid-cols-[12rem_minmax(0,1fr)_20rem] xl:grid-cols-[13rem_minmax(0,1fr)_20rem]">
+    <div ref={videoWorkspaceRef} data-video-workspace data-video-layout="three" className="grid min-h-0 flex-1 items-stretch gap-2 lg:grid-cols-[12rem_minmax(0,1fr)_20rem] xl:grid-cols-[13rem_minmax(0,1fr)_20rem]">
       <Panel className="flex min-h-0 flex-col overflow-hidden">
         <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-2.5 py-2">
           <Label>Player occurrences</Label><Badge>{occurrences.length}</Badge>
@@ -335,17 +349,19 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
             <p className="mt-2 text-xs text-slate-400">{selected ? "Select the match video" : "Select a player occurrence"}</p>
           </button>}
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-white/10 p-2">
-          <div className="flex gap-1">
+        <div className="shrink-0 border-t border-white/10 p-2">
+          <input aria-label="Clip position" type="range" min={selected?.startTimeSeconds || 0} max={selected?.endTimeSeconds || 0} step={0.1} value={selected ? Math.max(selected.startTimeSeconds, Math.min(currentTime, selected.endTimeSeconds)) : 0} disabled={!sourceUrl || !selected} onChange={(event) => seekTo(Number(event.target.value))} className="w-full accent-cyan-300"/>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-2"><div className="flex gap-1">
             <Button size="icon" className="h-8 w-8" disabled={selectedIndex <= 0} onClick={() => selectOccurrence(occurrences[selectedIndex - 1])}><ChevronLeft size={15}/></Button>
+            <Button size="icon" className="h-8 w-8" title="Back 5 seconds (←)" disabled={!sourceUrl || !selected} onClick={() => seekTo(currentTime - 5)}><Rewind size={14}/></Button>
             <Button size="icon" className="h-8 w-8" variant="primary" disabled={!sourceUrl || !selected} onClick={togglePlayback}>{playing ? <Pause size={15}/> : <Play size={15}/>}</Button>
+            <Button size="icon" className="h-8 w-8" title="Forward 5 seconds (→)" disabled={!sourceUrl || !selected} onClick={() => seekTo(currentTime + 5)}><FastForward size={14}/></Button>
             <Button size="icon" className="h-8 w-8" disabled={selectedIndex < 0 || selectedIndex >= occurrences.length - 1} onClick={() => selectOccurrence(occurrences[selectedIndex + 1])}><ChevronRight size={15}/></Button>
             <div className="flex overflow-hidden rounded-md border border-white/10">{[1, 2, 4].map((value) => <button key={value} type="button" onClick={() => {
               setRate(value);
               if (videoRef.current) videoRef.current.playbackRate = value;
             }} className={`h-8 px-2 text-[10px] ${rate === value ? "bg-cyan-300 text-slate-950" : "bg-white/[.04] text-slate-300"}`}>{value}×</button>)}</div>
-          </div>
-          <span className="font-mono text-xs text-white">{formatTime(currentTime)}{selected ? <span className="text-slate-600"> / {formatTime(selected.endTimeSeconds)}</span> : null}</span>
+          </div><div className="flex items-center gap-2"><span className="font-mono text-xs text-white">{formatTime(currentTime)}{selected ? <span className="text-slate-600"> / {formatTime(selected.endTimeSeconds)}</span> : null}</span><VideoFullscreenButton targetRef={videoWorkspaceRef}/></div></div>
         </div>
       </Panel>
 
