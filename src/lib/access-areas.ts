@@ -13,6 +13,9 @@ export const accessAreaDetails: Record<AccessArea, { label: string; defaultPassw
 
 export const globalAccessDefaultPassword = "global";
 
+// Temporarily disabled: keep the complete area-password feature ready to reactivate.
+export const areaPasswordsEnabled = false;
+
 export function isAccessArea(value: unknown): value is AccessArea {
   return typeof value === "string" && accessAreas.includes(value as AccessArea);
 }

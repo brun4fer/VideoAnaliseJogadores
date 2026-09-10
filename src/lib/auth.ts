@@ -1,7 +1,7 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { accessAreaDetails, globalAccessDefaultPassword, type AccessArea } from "@/lib/access-areas";
+import { accessAreaDetails, areaPasswordsEnabled, globalAccessDefaultPassword, type AccessArea } from "@/lib/access-areas";
 
 export const SESSION_COOKIE = "player_analysis_session";
 const SESSION_DAYS = 7;
@@ -97,6 +97,7 @@ export function verifyGlobalAccessPassword(account: Account, password: string) {
 }
 
 export function hasAreaAccess(account: Account, area: AccessArea) {
+  if (!areaPasswordsEnabled) return true;
   return Boolean(account.session.globalAccessUnlockedAt || account.session.unlockedAccessAreas.includes(area));
 }
 
