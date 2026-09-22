@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, Crosshair, FastForward, FileVideo, Loader2, Pause, Pencil, Play, Rewind, Save, Tags, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Crosshair, FastForward, FileVideo, Loader2, Minus, Pause, Pencil, Play, Plus, Rewind, Save, Tags, Trash2, Upload, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { actionResultColor, actionsForPlayer, actionTypeByKey, type ActionType } from "@/lib/action-types";
 import type { ActionRecord, MatchDetail, SubActionRecord } from "@/lib/domain";
@@ -110,6 +110,12 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
       videoRef.current.pause();
       videoRef.current.currentTime = subaction.eventTimeSeconds;
     }
+  }, [search, selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!selected || search.get("editOccurrence") !== "1") return;
+    playlistActiveRef.current = false;
+    setEditingOccurrence(selected);
   }, [search, selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function selectOccurrence(action: ActionRecord) {
@@ -365,7 +371,7 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
             <Button size="icon" className="h-8 w-8" variant="primary" disabled={!sourceUrl || !selected} onClick={togglePlayback}>{playing ? <Pause size={15}/> : <Play size={15}/>}</Button>
             <Button size="icon" className="h-8 w-8" title="Forward 5 seconds (→)" disabled={!sourceUrl || !selected} onClick={() => seekTo(currentTime + 5)}><FastForward size={14}/></Button>
             <Button size="icon" className="h-8 w-8" disabled={selectedIndex < 0 || selectedIndex >= occurrences.length - 1} onClick={() => selectOccurrence(occurrences[selectedIndex + 1])}><ChevronRight size={15}/></Button>
-            <div className="flex overflow-hidden rounded-md border border-white/10">{[1, 2, 4].map((value) => <button key={value} type="button" onClick={() => {
+            <div className="flex overflow-hidden rounded-md border border-white/10">{[.5, 1, 2, 4].map((value) => <button key={value} type="button" onClick={() => {
               setRate(value);
               if (videoRef.current) videoRef.current.playbackRate = value;
             }} className={`h-8 px-2 text-[10px] ${rate === value ? "bg-cyan-300 text-slate-950" : "bg-white/[.04] text-slate-300"}`}>{value}×</button>)}</div>
@@ -467,10 +473,11 @@ function OccurrenceEditDialog({ action, players, currentTime, duration, saving, 
   onSave: (values: { playerId: string; eventTimeSeconds: number; startTimeSeconds: number; endTimeSeconds: number }) => Promise<void>;
 }) {
   const [playerId, setPlayerId] = useState(action.playerId);
-  const [eventTime, setEventTime] = useState(String(action.eventTimeSeconds));
-  const [startTime, setStartTime] = useState(String(action.startTimeSeconds));
-  const [endTime, setEndTime] = useState(String(action.endTimeSeconds));
-  const videoTime = String(roundTime(currentTime));
+  const [eventTime, setEventTime] = useState(action.eventTimeSeconds);
+  const [startTime, setStartTime] = useState(action.startTimeSeconds);
+  const [endTime, setEndTime] = useState(action.endTimeSeconds);
+  const earliestRequired = Math.min(eventTime, ...action.subActions.map((item) => item.eventTimeSeconds));
+  const latestRequired = Math.max(eventTime, ...action.subActions.map((item) => item.eventTimeSeconds));
 
   return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="edit-occurrence-title">
     <Panel className="w-full max-w-lg overflow-hidden border-cyan-300/20 bg-slate-950 shadow-2xl">
@@ -487,9 +494,9 @@ function OccurrenceEditDialog({ action, players, currentTime, duration, saving, 
         event.preventDefault();
         void onSave({
           playerId,
-          eventTimeSeconds: Number(eventTime),
-          startTimeSeconds: Number(startTime),
-          endTimeSeconds: Number(endTime),
+          eventTimeSeconds: eventTime,
+          startTimeSeconds: startTime,
+          endTimeSeconds: endTime,
         });
       }}>
         <label className="block">
@@ -500,21 +507,12 @@ function OccurrenceEditDialog({ action, players, currentTime, duration, saving, 
         </label>
 
         <div className="grid gap-3 sm:grid-cols-3">
-          <OccurrenceTimeField label="Clip start" value={startTime} onChange={setStartTime} disabled={saving} duration={duration}/>
-          <OccurrenceTimeField label="Action time" value={eventTime} onChange={setEventTime} disabled={saving} duration={duration}/>
-          <OccurrenceTimeField label="Clip end" value={endTime} onChange={setEndTime} disabled={saving} duration={duration}/>
+          <OccurrenceTimeAdjuster label="Clip start" value={startTime} disabled={saving} onStep={(delta) => setStartTime((value) => roundTime(Math.max(0, Math.min(earliestRequired, value + delta))))}/>
+          <OccurrenceTimeAdjuster label="Action time" value={eventTime} disabled={saving} onStep={(delta) => setEventTime((value) => roundTime(Math.max(startTime, Math.min(endTime, value + delta))))}/>
+          <OccurrenceTimeAdjuster label="Clip end" value={endTime} disabled={saving} onStep={(delta) => setEndTime((value) => roundTime(Math.max(latestRequired, Math.min(duration || Number.POSITIVE_INFINITY, value + delta))))}/>
         </div>
 
-        <div className="rounded-md border border-white/10 bg-white/[.03] p-3">
-          <p className="text-[10px] text-slate-400">Current video position: <span className="font-mono text-cyan-200">{formatTime(currentTime)}</span></p>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            <Button type="button" size="sm" disabled={saving} onClick={() => setStartTime(videoTime)}>Use as start</Button>
-            <Button type="button" size="sm" disabled={saving} onClick={() => setEventTime(videoTime)}>Use as action</Button>
-            <Button type="button" size="sm" disabled={saving} onClick={() => setEndTime(videoTime)}>Use as end</Button>
-          </div>
-        </div>
-
-        <p className="text-[10px] leading-relaxed text-slate-500">The action time must be inside the clip. The clip must also continue to include every saved subaction.</p>
+        <p className="text-[10px] leading-relaxed text-slate-500">Use −1s and +1s to make simple adjustments. The action time and every saved subaction must remain inside the clip. Video currently at {formatTime(currentTime)}.</p>
         <div className="flex justify-end gap-2 border-t border-white/10 pt-4">
           <Button type="button" onClick={onClose} disabled={saving}>Cancel</Button>
           <Button type="submit" variant="primary" disabled={saving || !playerId}>
@@ -526,15 +524,18 @@ function OccurrenceEditDialog({ action, players, currentTime, duration, saving, 
   </div>;
 }
 
-function OccurrenceTimeField({ label, value, onChange, disabled, duration }: {
+function OccurrenceTimeAdjuster({ label, value, onStep, disabled }: {
   label: string;
-  value: string;
-  onChange: (value: string) => void;
+  value: number;
+  onStep: (delta: number) => void;
   disabled: boolean;
-  duration?: number;
 }) {
-  return <label className="block">
-    <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[.14em] text-slate-400">{label}</span>
-    <Input type="number" min={0} max={duration} step={0.1} required value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} className="font-mono"/>
-  </label>;
+  return <div className="rounded-md border border-white/10 bg-white/[.03] p-2">
+    <span className="block text-center text-[9px] font-semibold uppercase tracking-[.14em] text-slate-400">{label}</span>
+    <span className="mt-2 block text-center font-mono text-sm font-semibold text-white">{formatTime(value)}</span>
+    <div className="mt-2 grid grid-cols-2 gap-1">
+      <Button type="button" size="sm" disabled={disabled} title={`Move ${label.toLowerCase()} back 1 second`} onClick={() => onStep(-1)}><Minus size={12}/>1s</Button>
+      <Button type="button" size="sm" disabled={disabled} title={`Move ${label.toLowerCase()} forward 1 second`} onClick={() => onStep(1)}><Plus size={12}/>1s</Button>
+    </div>
+  </div>;
 }

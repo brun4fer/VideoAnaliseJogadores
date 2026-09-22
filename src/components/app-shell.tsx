@@ -88,7 +88,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="mx-auto flex max-w-[1800px] items-center justify-between gap-2 px-2 py-2 sm:px-4">
         <Link href="/" className="flex min-w-0 shrink-0 items-center gap-3">
           <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-cyan-300/30 bg-cyan-300/10 text-cyan-200 shadow-glow"><UsersRound size={20} /></span>
-          <span className="min-w-0"><span className="block truncate text-sm font-semibold text-cyan-100">{account?.teamName?.toUpperCase() || "PLAYER · ANALYSIS"}</span><span className="block truncate text-xs text-slate-400">{account?.name || "Players, video and maps"}</span></span>
+          <span className="min-w-0"><span className="block truncate text-sm font-semibold text-cyan-100">{account?.teamName?.toUpperCase() || "AP · OUR TEAM PERFORMANCE"}</span><span className="block truncate text-xs text-slate-400">{account?.name || "Our Team Performance"}</span></span>
         </Link>
         <div className="flex min-w-0 items-center gap-2"><nav className="flex min-w-0 items-center gap-1 overflow-x-auto rounded-lg border border-white/10 bg-white/[.03] p-1">
           {links.map(({ href, label, icon: Icon, area }) => {

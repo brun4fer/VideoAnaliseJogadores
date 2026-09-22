@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Player Analysis",
-    short_name: "Player Analysis",
+    name: "AP – Our Team Performance",
+    short_name: "AP Performance",
     description: "Private football player video analysis, occurrences and action maps.",
     start_url: "/",
     scope: "/",

@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     const playerIds = uniquePlayerIds(body.playerIds);
     if (playerIds.length < 1 || playerIds.length > 18) return badRequest("Select between 1 and 18 players for the match squad.");
     const [clientClub, competition, opponent] = await Promise.all([
-      prisma.club.findFirst({ where: { workspaceId: workspace.id, isClientClub: true } }),
+      prisma.club.findFirst({ where: { id: workspace.activeClientClubId || undefined, workspaceId: workspace.id, isClientClub: true } }),
       prisma.competition.findFirst({ where: { id: body.competitionId, workspaceId: workspace.id } }),
       prisma.club.findFirst({ where: { id: body.opponentClubId, workspaceId: workspace.id, isClientClub: false, competitions: { some: { id: body.competitionId } } } }),
     ]);

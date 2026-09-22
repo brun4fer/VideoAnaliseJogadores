@@ -43,7 +43,7 @@ function MatchEditDialog({ match, onClose, onSaved }: { match: Match; onClose: (
 
   useEffect(() => {
     Promise.all([apiFetch<{ seasons: Season[]; clientClub: { players?: SquadPlayer[] } | null }>("/api/structure"), apiFetch<MatchDetail>(`/api/matches/${match.id}`)])
-      .then(([structure, detail]) => { setSeasons(structure.seasons); setPlayers(structure.clientClub?.players || []); setPlayerIds(detail.squad.map((item) => item.playerId)); setFirstHalfAttacksRight(detail.firstHalfAttacksRight); })
+      .then(([structure, detail]) => { setSeasons(structure.seasons); setPlayers(detail.club.players || structure.clientClub?.players || []); setPlayerIds(detail.squad.map((item) => item.playerId)); setFirstHalfAttacksRight(detail.firstHalfAttacksRight); })
       .catch((caught) => setError(caught.message));
   }, [match.id]);
 

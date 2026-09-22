@@ -16,6 +16,10 @@ export async function GET(request: Request) {
       prisma.competition.findMany({ where: { workspaceId: workspace.id }, orderBy: { name: "asc" }, include: { season: true } }),
     ]);
     const serializeRowVideo = <T extends { video: Parameters<typeof serializeVideo>[0] | null }>(row: T) => ({ ...row, video: row.video ? serializeVideo(row.video) : null });
+    const serializedOccurrences = occurrences.map((occurrence) => ({
+      ...occurrence,
+      match: serializeRowVideo(occurrence.match),
+    }));
     const actions = occurrences.flatMap((occurrence) => {
       const subActions = occurrence.subActions.length ? occurrence.subActions : occurrence.actionKey !== "unclassified" ? [{
         id: occurrence.id, playerActionId: occurrence.id, actionKey: occurrence.actionKey, actionName: occurrence.actionName,
@@ -36,6 +40,6 @@ export async function GET(request: Request) {
         match: serializeRowVideo(occurrence.match),
       }));
     });
-    return ok({ players, actions, matches: matches.map(serializeRowVideo), competitions });
+    return ok({ players, occurrences: serializedOccurrences, actions, matches: matches.map(serializeRowVideo), competitions });
   } catch (error) { return serverError(error); }
 }

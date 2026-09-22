@@ -15,17 +15,18 @@ type Player = { id: string; name: string; shirtNumber: number | null; photoUrl: 
 type Club = { id: string; name: string; shortName: string | null; badgeUrl: string | null; players?: Player[]; competitions?: Array<{ id: string; name: string }> };
 type Competition = { id: string; name: string; clubs: Club[] };
 type Season = { id: string; name: string; competitions: Competition[] };
-type Data = { clientClub: Club | null; seasons: Season[]; opponents: Club[] };
+type Data = { clientClub: Club | null; clientClubs: Club[]; seasons: Season[]; opponents: Club[] };
 
 const positions = ["Goalkeeper", "Right-Back", "Left-Back", "Centre-Back", "Right Wing-Back", "Left Wing-Back", "Defensive Midfielder", "Central Midfielder", "Attacking Midfielder", "Right Winger", "Left Winger", "Forward", "Striker"];
 const imageAccept = "image/jpeg,image/png,image/webp,image/avif,image/gif";
 
 export function StructureClient() {
-  const [data, setData] = useState<Data>({ clientClub: null, seasons: [], opponents: [] });
+  const [data, setData] = useState<Data>({ clientClub: null, clientClubs: [], seasons: [], opponents: [] });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [seasonId, setSeasonId] = useState("");
   const [competitionId, setCompetitionId] = useState("");
+  const [creatingTeam, setCreatingTeam] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -69,6 +70,7 @@ export function StructureClient() {
         formElement.dispatchEvent(new Event("reset"));
       }
       await load();
+      if (kind === "clientClub") setCreatingTeam(false);
       setNotice("Saved successfully.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "The data could not be saved.");
@@ -92,6 +94,15 @@ export function StructureClient() {
     }
   }
 
+  async function switchTeam(clubId: string) {
+    setBusy(true); setNotice(null);
+    try {
+      await apiFetch("/api/structure", { method: "POST", body: JSON.stringify({ kind: "activeClientClub", clubId }) });
+      setCreatingTeam(false); await load(); setNotice("Active team changed. New matches will use this team.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "The active team could not be changed."); }
+    finally { setBusy(false); }
+  }
+
   async function remove(resource: string, id: string, label: string) {
     if (!confirm(`Delete ${label}? Dependent data may also be deleted.`)) return;
     try {
@@ -108,14 +119,15 @@ export function StructureClient() {
     {areaPasswordsEnabled ? <ManagementPasswordPanel/> : null}
     <MediaLibraryLinkPanel/>
     <Panel className="p-5">
-      <div className="flex items-center gap-3"><ClubBadge club={data.clientClub}/><div><Label>Client team</Label><h2 className="mt-1 text-xl font-bold text-white">{data.clientClub?.name || "Set up the team that will always be analysed"}</h2></div></div>
-      <form key={data.clientClub?.id || "new-client"} className="mt-5 grid gap-3 md:grid-cols-[1fr_.45fr_1fr_auto] md:items-start" onSubmit={(event) => void submit(event, "clientClub")}>
-        <Field label="Name"><Input name="name" defaultValue={data.clientClub?.name} required placeholder="Team name"/></Field>
-        <Field label="Short name"><Input name="shortName" defaultValue={data.clientClub?.shortName || ""} placeholder="Abbreviation"/></Field>
-        <ImageField label={data.clientClub?.badgeUrl ? "Replace badge" : "Badge"}/>
-        <Button variant="primary" className="w-full md:mt-5 md:w-auto" disabled={busy}>{data.clientClub ? "Save team" : "Create team"}</Button>
+      <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><ClubBadge club={creatingTeam ? null : data.clientClub}/><div><Label>Analysed team</Label><h2 className="mt-1 text-xl font-bold text-white">{creatingTeam ? "Create another team" : data.clientClub?.name || "Set up the team that will be analysed"}</h2></div></div><div className="flex w-full gap-2 sm:w-auto"><Select aria-label="Active analysed team" value={creatingTeam ? "" : data.clientClub?.id || ""} disabled={busy || creatingTeam || !data.clientClubs.length} onChange={(event) => void switchTeam(event.target.value)} className="min-w-52"><option value="">Select team</option>{data.clientClubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}</Select><Button type="button" onClick={() => setCreatingTeam((value) => !value)}>{creatingTeam ? "Cancel" : <><Plus size={14}/>New team</>}</Button></div></div>
+      <form key={creatingTeam ? "new-client" : data.clientClub?.id || "first-client"} className="mt-5 grid gap-3 md:grid-cols-[1fr_.45fr_1fr_auto] md:items-start" onSubmit={(event) => void submit(event, "clientClub")}>
+        {!creatingTeam && data.clientClub ? <input type="hidden" name="clubId" value={data.clientClub.id}/> : null}
+        <Field label="Name"><Input name="name" defaultValue={creatingTeam ? "" : data.clientClub?.name} required placeholder="Team name"/></Field>
+        <Field label="Short name"><Input name="shortName" defaultValue={creatingTeam ? "" : data.clientClub?.shortName || ""} placeholder="Abbreviation"/></Field>
+        <ImageField label={!creatingTeam && data.clientClub?.badgeUrl ? "Replace badge" : "Badge"}/>
+        <Button variant="primary" className="w-full md:mt-5 md:w-auto" disabled={busy}>{creatingTeam || !data.clientClub ? "Create team" : "Save team"}</Button>
       </form>
-      {data.clientClub ? <p className="mt-3 text-xs text-slate-500">Automatically linked to every competition in this account. Images are private and stored in Cloudflare R2.</p> : null}
+      {data.clientClub ? <p className="mt-3 text-xs text-slate-500">The active team supplies the squad for new matches. Existing matches keep their original team and players.</p> : null}
     </Panel>
     <div className="grid gap-4 xl:grid-cols-4">
       <Panel className="p-4"><Heading icon={Trophy} title="1. Season"/><form className="mt-4 space-y-3" onSubmit={(event) => void submit(event, "season")}><Field label="Name"><Input name="name" placeholder="2026/27" required/></Field><Button variant="primary" className="w-full" disabled={busy}><Plus size={15}/>Add season</Button></form><div className="mt-5 space-y-2">{data.seasons.map((season) => <Row key={season.id} active={season.id === seasonId} label={season.name} onClick={() => setSeasonId(season.id)} onDelete={() => void remove("season", season.id, season.name)}/>)}</div></Panel>
@@ -123,7 +135,7 @@ export function StructureClient() {
       <Panel className="p-4"><Heading icon={Building2} title="3. Opponent"/><form className="mt-4 space-y-3" onSubmit={(event) => void submit(event, "opponent")}><Field label="Name"><Input name="name" placeholder="Opponent team" required/></Field><Field label="Short name"><Input name="shortName" placeholder="Abbreviation"/></Field><ImageField label="Badge"/><Button variant="primary" className="w-full" disabled={busy || !competitionId}><Plus size={15}/>Add to competition</Button></form><div className="mt-5 space-y-2">{selectedCompetition?.clubs.map((club) => <Row key={club.id} label={club.name} active={false} imageUrl={club.badgeUrl} onImage={(file) => void replaceImage("clubs", club.id, file)} onDelete={() => void remove("opponent", club.id, club.name)}/>)}</div></Panel>
       <Panel className="p-4"><Heading icon={UsersRound} title="4. Player"/><form className="mt-4 space-y-3" onSubmit={(event) => void submit(event, "player")}><Field label="Name"><Input name="name" placeholder="Full name" required/></Field><div className="grid grid-cols-2 gap-2"><Field label="Number"><Input name="shirtNumber" type="number" min="1" max="99"/></Field><Field label="Position"><Select name="position"><option value="">Select</option>{positions.map((position) => <option key={position}>{position}</option>)}</Select></Field></div><ImageField label="Photo"/><label className="flex items-center gap-2 text-sm text-slate-300"><input name="isGoalkeeper" type="checkbox" className="accent-cyan-300"/> Goalkeeper</label><Button variant="primary" className="w-full" disabled={busy || !data.clientClub}><Plus size={15}/>Add player</Button></form></Panel>
     </div>
-    <Panel className="p-4"><div className="flex items-center justify-between"><div><Label>Client team squad</Label><h2 className="mt-1 text-xl font-bold text-white">{data.clientClub?.name || "Set up the team first"}</h2></div><UserRound className="text-cyan-300"/></div><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-6">{data.clientClub?.players?.map((player) => <div key={player.id} className="flex items-center gap-3 rounded-lg border border-white/10 bg-black/15 p-2"><PlayerPhoto player={player}/><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-white">{player.shirtNumber ? `${player.shirtNumber} · ` : ""}{player.name}</p><p className="truncate text-xs text-slate-500">{playerPositionLabel(player.position)}</p></div><ImageUploadButton label={`Replace photo for ${player.name}`} disabled={busy} onSelect={(file) => void replaceImage("players", player.id, file)}/><button type="button" aria-label="Delete player" onClick={() => void remove("player", player.id, player.name)} className="text-slate-600 hover:text-red-300"><Trash2 size={14}/></button></div>)}</div></Panel>
+    <Panel className="p-4"><div className="flex items-center justify-between"><div><Label>Active team squad</Label><h2 className="mt-1 text-xl font-bold text-white">{data.clientClub?.name || "Set up the team first"}</h2></div><UserRound className="text-cyan-300"/></div><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">{data.clientClub?.players?.map((player) => <div key={player.id} className="flex min-h-20 items-center gap-3 rounded-lg border border-white/10 bg-black/15 p-2.5"><PlayerPhoto player={player}/><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-white">{player.shirtNumber ? `${player.shirtNumber} · ` : ""}{player.name}</p><p className="truncate text-xs text-slate-500">{playerPositionLabel(player.position)}</p></div><ImageUploadButton label={`Replace photo for ${player.name}`} disabled={busy} onSelect={(file) => void replaceImage("players", player.id, file)}/><button type="button" aria-label="Delete player" onClick={() => void remove("player", player.id, player.name)} className="text-slate-600 hover:text-red-300"><Trash2 size={14}/></button></div>)}</div></Panel>
   </div>;
 }
 
@@ -170,4 +182,4 @@ function Row({ label, active, imageUrl, onClick, onImage, onDelete }: { label: s
 }
 
 function ClubBadge({ club }: { club: Club | null }) { return <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-cyan-300/10 bg-contain bg-center bg-no-repeat text-cyan-200" style={club?.badgeUrl ? { backgroundImage: `url(${club.badgeUrl})` } : undefined}>{!club?.badgeUrl ? <Shield/> : null}</span>; }
-function PlayerPhoto({ player }: { player: Player }) { return <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-cyan-300/10 bg-cover bg-center text-cyan-200" style={player.photoUrl ? { backgroundImage: `url(${player.photoUrl})` } : undefined}>{!player.photoUrl ? <UserRound size={19}/> : null}</span>; }
+function PlayerPhoto({ player }: { player: Player }) { return <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-cyan-300/10 bg-cover bg-center text-cyan-200" style={player.photoUrl ? { backgroundImage: `url(${player.photoUrl})` } : undefined}>{!player.photoUrl ? <UserRound size={24}/> : null}</span>; }

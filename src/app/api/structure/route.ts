@@ -5,12 +5,13 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   try {
     const { workspace } = await requireAreaAccount(["squad", "newMatch", "matches"]);
-    const [clientClub, seasons, opponents] = await Promise.all([
-      prisma.club.findFirst({ where: { workspaceId: workspace.id, isClientClub: true }, include: { players: { orderBy: [{ shirtNumber: "asc" }, { name: "asc" }] }, competitions: { select: { id: true, name: true } } } }),
+    const [clientClubs, seasons, opponents] = await Promise.all([
+      prisma.club.findMany({ where: { workspaceId: workspace.id, isClientClub: true }, orderBy: { createdAt: "asc" }, include: { players: { orderBy: [{ shirtNumber: "asc" }, { name: "asc" }] }, competitions: { select: { id: true, name: true } } } }),
       prisma.season.findMany({ where: { workspaceId: workspace.id }, orderBy: { createdAt: "desc" }, include: { competitions: { orderBy: { name: "asc" }, include: { clubs: { where: { isClientClub: false }, orderBy: { name: "asc" } } } } } }),
       prisma.club.findMany({ where: { workspaceId: workspace.id, isClientClub: false }, orderBy: { name: "asc" }, include: { competitions: { select: { id: true, name: true } } } }),
     ]);
-    return ok({ workspace, clientClub, seasons, opponents });
+    const clientClub = clientClubs.find((club) => club.id === workspace.activeClientClubId) || clientClubs[0] || null;
+    return ok({ workspace, clientClub, clientClubs, seasons, opponents });
   } catch (error) { return serverError(error); }
 }
 
@@ -19,11 +20,22 @@ export async function POST(request: Request) {
     const { workspace } = await requireAreaAccount("squad"); const body = await request.json();
     if (body.kind === "clientClub") {
       if (!body.name?.trim()) return badRequest("Enter the client team name.");
-      const existing = await prisma.club.findFirst({ where: { workspaceId: workspace.id, isClientClub: true } });
+      const existing = body.clubId ? await prisma.club.findFirst({ where: { id: String(body.clubId), workspaceId: workspace.id, isClientClub: true } }) : null;
       const data = { name: body.name.trim(), shortName: body.shortName?.trim() || null };
       if (existing) return ok(await prisma.club.update({ where: { id: existing.id }, data }));
       const competitions = await prisma.competition.findMany({ where: { workspaceId: workspace.id }, select: { id: true } });
-      return ok(await prisma.club.create({ data: { ...data, isClientClub: true, workspaceId: workspace.id, competitions: { connect: competitions } } }), 201);
+      const created = await prisma.$transaction(async (transaction) => {
+        const club = await transaction.club.create({ data: { ...data, isClientClub: true, workspaceId: workspace.id, competitions: { connect: competitions } } });
+        await transaction.workspace.update({ where: { id: workspace.id }, data: { activeClientClubId: club.id } });
+        return club;
+      });
+      return ok(created, 201);
+    }
+    if (body.kind === "activeClientClub") {
+      const club = await prisma.club.findFirst({ where: { id: String(body.clubId || ""), workspaceId: workspace.id, isClientClub: true } });
+      if (!club) return badRequest("Select a valid analysed team.");
+      await prisma.workspace.update({ where: { id: workspace.id }, data: { activeClientClubId: club.id } });
+      return ok(club);
     }
     if (body.kind === "season") {
       if (!body.name?.trim()) return badRequest("Enter the season name.");
@@ -33,8 +45,8 @@ export async function POST(request: Request) {
       if (!body.name?.trim() || !body.seasonId) return badRequest("Select the season and enter the competition name.");
       const season = await prisma.season.findFirst({ where: { id: body.seasonId, workspaceId: workspace.id } });
       if (!season) return badRequest("The selected season does not belong to your account.");
-      const clientClub = await prisma.club.findFirst({ where: { workspaceId: workspace.id, isClientClub: true } });
-      return ok(await prisma.competition.create({ data: { name: body.name.trim(), seasonId: season.id, workspaceId: workspace.id, ...(clientClub ? { clubs: { connect: { id: clientClub.id } } } : {}) } }), 201);
+      const clientClubs = await prisma.club.findMany({ where: { workspaceId: workspace.id, isClientClub: true }, select: { id: true } });
+      return ok(await prisma.competition.create({ data: { name: body.name.trim(), seasonId: season.id, workspaceId: workspace.id, ...(clientClubs.length ? { clubs: { connect: clientClubs } } : {}) } }), 201);
     }
     if (body.kind === "opponent") {
       if (!body.name?.trim() || !body.competitionId) return badRequest("Select the competition and enter the opponent.");
@@ -48,7 +60,7 @@ export async function POST(request: Request) {
     }
     if (body.kind === "player") {
       if (!body.name?.trim()) return badRequest("Enter the player name.");
-      const clientClub = await prisma.club.findFirst({ where: { workspaceId: workspace.id, isClientClub: true } });
+      const clientClub = await prisma.club.findFirst({ where: { id: workspace.activeClientClubId || undefined, workspaceId: workspace.id, isClientClub: true } }) || await prisma.club.findFirst({ where: { workspaceId: workspace.id, isClientClub: true }, orderBy: { createdAt: "asc" } });
       if (!clientClub) return badRequest("Set up the client team first.");
       const shirtNumber = body.shirtNumber === "" || body.shirtNumber == null ? null : Number(body.shirtNumber);
       return ok(await prisma.player.create({ data: { name: body.name.trim(), shirtNumber, position: body.position?.trim() || null, isGoalkeeper: Boolean(body.isGoalkeeper), clubId: clientClub.id, workspaceId: workspace.id } }), 201);

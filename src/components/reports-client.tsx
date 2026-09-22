@@ -20,12 +20,13 @@ type ReportAction = ClipAction & { playerId: string; actionKey: string; outcome:
 type Competition = { id: string; name: string; season: { name: string } };
 export function ReportsClient() {
   const files = useRef(new Map<string, File>()); const videoInput = useRef<HTMLInputElement | null>(null);
-  const [data, setData] = useState<{ players: Player[]; actions: ReportAction[]; matches: Match[]; competitions: Competition[] }>({ players: [], actions: [], matches: [], competitions: [] }); const [playerId, setPlayerId] = useState("all"); const [actionKey, setActionKey] = useState("all"); const [competitionId, setCompetitionId] = useState("all"); const [matchId, setMatchId] = useState("all"); const [selectedId, setSelectedId] = useState<string | null>(null); const [playbackRequest, setPlaybackRequest] = useState(0); const [error, setError] = useState<string | null>(null); const [exporting, setExporting] = useState(false); const [downloadingMatchId, setDownloadingMatchId] = useState<string | null>(null); const [deletingId, setDeletingId] = useState<string | null>(null); const [status, setStatus] = useState("");
+  const [data, setData] = useState<{ players: Player[]; actions: ReportAction[]; matches: Match[]; competitions: Competition[] }>({ players: [], actions: [], matches: [], competitions: [] }); const [playerId, setPlayerId] = useState("all"); const [actionKey, setActionKey] = useState("all"); const [competitionId, setCompetitionId] = useState("all"); const [matchId, setMatchId] = useState("all"); const [selectedId, setSelectedId] = useState<string | null>(null); const [selectedIds, setSelectedIds] = useState<string[]>([]); const [playbackRequest, setPlaybackRequest] = useState(0); const [error, setError] = useState<string | null>(null); const [exporting, setExporting] = useState(false); const [downloadingMatchId, setDownloadingMatchId] = useState<string | null>(null); const [deletingId, setDeletingId] = useState<string | null>(null); const [status, setStatus] = useState("");
   useEffect(() => { apiFetch<typeof data>("/api/analytics?area=reports").then(setData).catch((caught) => setError(caught.message)); }, []);
   const availableMatches = useMemo(() => data.matches.filter((match) => competitionId === "all" || match.competition.id === competitionId), [competitionId, data.matches]);
   useEffect(() => { if (matchId !== "all" && !availableMatches.some((match) => match.id === matchId)) setMatchId("all"); }, [availableMatches, matchId]);
   const filtered = useMemo(() => data.actions.filter((action) => (playerId === "all" || action.playerId === playerId) && actionMatchesFilter(action.actionKey, actionKey) && (competitionId === "all" || action.match.competition.id === competitionId) && (matchId === "all" || action.matchId === matchId)), [data.actions, playerId, actionKey, competitionId, matchId]);
   useEffect(() => { if (selectedId && !filtered.some((action) => action.id === selectedId)) setSelectedId(null); }, [filtered, selectedId]);
+  useEffect(() => { setSelectedIds((current) => current.filter((id) => filtered.some((action) => action.id === id))); }, [filtered]);
   const selectedIndex = filtered.findIndex((action) => action.id === selectedId); const selected = selectedIndex >= 0 ? filtered[selectedIndex] : null; const positive = filtered.filter((action) => action.outcome === "positive").length; const negative = filtered.filter((action) => action.outcome === "negative").length;
   async function addVideos(list: FileList | null) { if (!list) return; const unmatched: string[] = []; for (const file of Array.from(list)) { const match = data.matches.find((item) => item.video?.fileName.toLowerCase() === file.name.toLowerCase()); if (!match) { unmatched.push(file.name); continue; } files.current.set(match.id, file); await rememberMatchVideo(match.id, file).catch(() => undefined); } setError(unmatched.length ? `Could not match these files: ${unmatched.join(", ")}.` : null); }
   async function getVideo(match: Match) { const file = files.current.get(match.id) || await getRememberedMatchVideo(match.id).catch(() => null); if (file) { files.current.set(match.id, file); return file; } return match.video?.storageStatus === "READY" ? (await getRemoteVideoUrl(match.id, "reports")).url : null; }
@@ -42,6 +43,7 @@ export function ReportsClient() {
       const endpoint = action.sourceType === "subaction" ? `/api/subactions/${action.id}` : `/api/actions/${action.parentActionId}`;
       await apiFetch(endpoint, { method: "DELETE" });
       setData((current) => ({ ...current, actions: current.actions.filter((item) => item.id !== action.id) }));
+      setSelectedIds((current) => current.filter((id) => id !== action.id));
       setSelectedId(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The analysed clip could not be deleted.");
@@ -82,9 +84,10 @@ export function ReportsClient() {
       setDownloadingMatchId(null);
     }
   }
-  async function exportFiltered() {
-    if (!filtered.length || exporting) return;
-    const actions = filtered;
+  async function exportSelected() {
+    if (!selectedIds.length || exporting) return;
+    const selected = new Set(selectedIds);
+    const actions = filtered.filter((action) => selected.has(action.id));
     let directory = null;
     try {
       directory = await pickExportDirectory();
@@ -142,11 +145,16 @@ export function ReportsClient() {
           <div className="flex items-center justify-between"><div><Label>Filtered actions</Label><p className="mt-1 text-xs text-slate-500">Select one clip or play the complete filtered list</p></div><Badge>{filtered.length}</Badge></div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <Button size="sm" variant="primary" disabled={!filtered.length} onClick={playAll}><Play size={14}/>Play all</Button>
-            <Button size="sm" disabled={!filtered.length || exporting} onClick={() => void exportFiltered()}>{exporting ? <Loader2 size={14} className="animate-spin"/> : <Archive size={14}/>}Export clips</Button>
+            <Button size="sm" disabled={!selectedIds.length || exporting} onClick={() => void exportSelected()}>{exporting ? <Loader2 size={14} className="animate-spin"/> : <Archive size={14}/>}Export selected ({selectedIds.length})</Button>
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2 text-[10px]">
+            <span className="text-slate-500">{selectedIds.length} selected · playback always uses all {filtered.length} results</span>
+            <span className="flex shrink-0 gap-2"><button type="button" disabled={!filtered.length} onClick={() => setSelectedIds(filtered.map((action) => action.id))} className="font-semibold text-cyan-200 disabled:opacity-40">Select all</button><button type="button" disabled={!selectedIds.length} onClick={() => setSelectedIds([])} className="font-semibold text-slate-400 disabled:opacity-40">Clear</button></span>
           </div>
         </div>
         <div className="max-h-[36rem] divide-y divide-white/[.06] overflow-y-auto">
           {filtered.length ? filtered.map((action) => <div key={action.id} className={`flex items-center gap-2 p-2 transition ${selectedId === action.id ? "bg-cyan-300/10" : "hover:bg-white/[.03]"}`}>
+            <input type="checkbox" aria-label={`Select ${action.player.name} · ${action.actionName} for export`} checked={selectedIds.includes(action.id)} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...new Set([...current, action.id])] : current.filter((id) => id !== action.id))} className="h-4 w-4 shrink-0 accent-cyan-300"/>
             <button type="button" onClick={() => playAction(action)} className="flex min-w-0 flex-1 items-center gap-3 p-1 text-left">
               <Play size={15} className="shrink-0 text-cyan-300"/>
               <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-white">{action.player.name} · {actionTypeByKey.get(action.actionKey)?.name || action.actionName}</span><span className="block truncate text-xs text-slate-500">{action.match.club.name} vs {action.match.opponentClub.name} · {formatTime(action.eventTimeSeconds)}</span></span>

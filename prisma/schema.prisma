@@ -10,6 +10,7 @@ datasource db {
 model Workspace {
   id                         String        @id @default(cuid())
   name                       String
+  activeClientClubId         String?       @unique
   managementPasswordHash     String?
   globalAccessPasswordHash   String?
   matchesAccessPasswordHash  String?
@@ -26,6 +27,7 @@ model Workspace {
   players                    Player[]
   matches                    Match[]
   users                      User[]
+  activeClientClub           Club?         @relation("ActiveClientClub", fields: [activeClientClubId], references: [id], onDelete: SetNull)
 }
 
 model User {
@@ -112,6 +114,7 @@ model Club {
   players         Player[]
   analyzedMatches Match[]       @relation("AnalyzedClub")
   opponentMatches Match[]       @relation("OpponentClub")
+  activeInWorkspace Workspace?  @relation("ActiveClientClub")
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
