@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, Crosshair, FastForward, FileVideo, Loader2, Minus, Pause, Pencil, Play, Plus, Rewind, Save, Tags, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Crosshair, FastForward, FileVideo, Loader2, Minus, Pause, Pencil, Play, Plus, RefreshCw, Rewind, Save, Tags, Trash2, Upload, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { actionResultColor, actionsForPlayer, actionTypeByKey, type ActionType } from "@/lib/action-types";
 import type { ActionRecord, MatchDetail, SubActionRecord } from "@/lib/domain";
@@ -302,6 +302,9 @@ export function SubactionWorkspace({ matchId }: { matchId: string }) {
     <Panel className="flex shrink-0 flex-wrap items-center gap-2 px-2 py-1.5">
       <Link href={`/analysis/${matchId}`} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-white/[.04] px-2.5 text-[10px] font-semibold text-slate-300 transition hover:bg-white/[.08] hover:text-white">
         <ArrowLeft size={12}/>Player tagging
+      </Link>
+      <Link href={`/analysis/${matchId}/sync`} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2.5 text-[10px] font-semibold text-cyan-100 transition hover:bg-cyan-300/20">
+        <RefreshCw size={12}/>Review and sync
       </Link>
       <label className="flex min-w-0 flex-1 items-center gap-2">
         <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[.16em] text-slate-500">Player</span>

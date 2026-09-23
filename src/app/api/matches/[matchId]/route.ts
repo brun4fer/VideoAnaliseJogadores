@@ -74,12 +74,14 @@ export async function PATCH(request: Request, context: { params: Promise<{ match
         ...(body.roundName !== undefined ? { roundName: body.roundName?.trim() || null } : {}),
         ...(body.venue !== undefined ? { venue: body.venue?.trim() || null } : {}),
         ...(body.notes !== undefined ? { notes: body.notes?.trim() || null } : {}),
+        ...(body.homeAway !== undefined ? { homeAway: body.homeAway === "AWAY" ? "AWAY" as const : "HOME" as const } : {}),
         ...(body.firstHalfAttacksRight !== undefined ? { firstHalfAttacksRight: Boolean(body.firstHalfAttacksRight) } : {}),
       } });
       if (playerIds) {
+        const currentMinutes = new Map((await transaction.matchSquad.findMany({ where: { matchId } })).map((item) => [item.playerId, item.minutesPlayed]));
         await transaction.matchSquad.deleteMany({ where: { matchId } });
         const groupByPlayer = new Map(playerLayout?.map((item) => [item.playerId, item.group]));
-        await transaction.matchSquad.createMany({ data: playerIds.map((playerId, sortOrder) => ({ matchId, playerId, sortOrder, lineupGroup: groupByPlayer.get(playerId) || null })) });
+        await transaction.matchSquad.createMany({ data: playerIds.map((playerId, sortOrder) => ({ matchId, playerId, sortOrder, lineupGroup: groupByPlayer.get(playerId) || null, minutesPlayed: currentMinutes.get(playerId) ?? null })) });
       }
       if (markersChanged) {
         await transaction.playerAction.updateMany({ where: { matchId }, data: { period: null } });

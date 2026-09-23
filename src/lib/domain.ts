@@ -20,12 +20,12 @@ export type ActionRecord = {
 };
 
 export type MatchDetail = {
-  id: string; matchDate: string | null; roundName: string | null; firstHalfAttacksRight: boolean;
+  id: string; matchDate: string | null; roundName: string | null; homeAway: "HOME" | "AWAY"; firstHalfAttacksRight: boolean;
   firstHalfStartSeconds: number | null; firstHalfEndSeconds: number | null;
   secondHalfStartSeconds: number | null; secondHalfEndSeconds: number | null;
   venue: string | null; notes: string | null; clubId: string; opponentClubId: string; competitionId: string;
   club: { id: string; name: string; players: PlayerRecord[] };
-  squad: Array<{ playerId: string; sortOrder: number; lineupGroup: PlayerPositionGroup | "substitutes" | null; player: PlayerRecord }>;
+  squad: Array<{ playerId: string; sortOrder: number; lineupGroup: PlayerPositionGroup | "substitutes" | null; minutesPlayed: number | null; player: PlayerRecord }>;
   opponentClub: { id: string; name: string };
   competition: { id: string; name: string; season: { id: string; name: string } };
   video: { fileName: string; fileSize: string; durationSeconds: number; mimeType: string; storageStatus: "LOCAL" | "UPLOADING" | "READY" | "FAILED"; uploadedAt: string | null } | null;

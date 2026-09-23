@@ -28,6 +28,23 @@ model Workspace {
   matches                    Match[]
   users                      User[]
   activeClientClub           Club?         @relation("ActiveClientClub", fields: [activeClientClubId], references: [id], onDelete: SetNull)
+  footballConnection         FootballOurPlayersConnection?
+}
+
+model FootballOurPlayersConnection {
+  id                       String    @id @default(cuid())
+  workspaceId              String    @unique
+  remoteBaseUrl            String
+  remoteConnectionId       String
+  accessToken              String
+  destinationWorkspaceId   String
+  destinationWorkspaceName String
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  lastUsedAt               DateTime?
+  workspace                Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([remoteBaseUrl, remoteConnectionId])
 }
 
 model User {
@@ -63,31 +80,33 @@ model Session {
 }
 
 model Season {
-  id           String        @id @default(cuid())
-  name         String
-  workspaceId  String
-  startDate    DateTime?
-  endDate      DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  competitions Competition[]
+  id               String        @id @default(cuid())
+  name             String
+  workspaceId      String
+  startDate        DateTime?
+  endDate          DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  footballSyncedAt DateTime?
+  workspace        Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  competitions     Competition[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
 }
 
 model Competition {
-  id          String    @id @default(cuid())
-  name        String
-  seasonId    String
-  workspaceId String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  season      Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  clubs       Club[]    @relation("CompetitionClubs")
-  matches     Match[]
+  id               String    @id @default(cuid())
+  name             String
+  seasonId         String
+  workspaceId      String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  footballSyncedAt DateTime?
+  season           Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clubs            Club[]    @relation("CompetitionClubs")
+  matches          Match[]
 
   @@unique([seasonId, name])
   @@index([workspaceId])
@@ -95,26 +114,27 @@ model Competition {
 }
 
 model Club {
-  id              String        @id @default(cuid())
-  name            String
-  shortName       String?
-  badgeUrl        String?
-  badgeStorageKey String?       @unique
-  badgeFileName   String?
-  badgeFileSize   Int?
-  badgeMimeType   String?
-  badgeEtag       String?
-  badgeUploadedAt DateTime?
-  isClientClub    Boolean       @default(false)
-  workspaceId     String
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  competitions    Competition[] @relation("CompetitionClubs")
-  players         Player[]
-  analyzedMatches Match[]       @relation("AnalyzedClub")
-  opponentMatches Match[]       @relation("OpponentClub")
-  activeInWorkspace Workspace?  @relation("ActiveClientClub")
+  id                String        @id @default(cuid())
+  name              String
+  shortName         String?
+  badgeUrl          String?
+  badgeStorageKey   String?       @unique
+  badgeFileName     String?
+  badgeFileSize     Int?
+  badgeMimeType     String?
+  badgeEtag         String?
+  badgeUploadedAt   DateTime?
+  isClientClub      Boolean       @default(false)
+  workspaceId       String
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  footballSyncedAt  DateTime?
+  workspace         Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  competitions      Competition[] @relation("CompetitionClubs")
+  players           Player[]
+  analyzedMatches   Match[]       @relation("AnalyzedClub")
+  opponentMatches   Match[]       @relation("OpponentClub")
+  activeInWorkspace Workspace?    @relation("ActiveClientClub")
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -157,6 +177,7 @@ model Match {
   opponentClubId         String
   competitionId          String
   workspaceId            String
+  homeAway               HomeAway       @default(HOME)
   firstHalfAttacksRight  Boolean        @default(true)
   firstHalfStartSeconds  Float?
   firstHalfEndSeconds    Float?
@@ -164,6 +185,7 @@ model Match {
   secondHalfEndSeconds   Float?
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @updatedAt
+  footballSyncedAt       DateTime?
   club                   Club           @relation("AnalyzedClub", fields: [clubId], references: [id], onDelete: Restrict)
   opponentClub           Club           @relation("OpponentClub", fields: [opponentClubId], references: [id], onDelete: Restrict)
   competition            Competition    @relation(fields: [competitionId], references: [id], onDelete: Restrict)
@@ -179,13 +201,14 @@ model Match {
 }
 
 model MatchSquad {
-  matchId     String
-  playerId    String
-  sortOrder   Int
-  lineupGroup String?
-  createdAt   DateTime @default(now())
-  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  matchId       String
+  playerId      String
+  sortOrder     Int
+  lineupGroup   String?
+  minutesPlayed Int?
+  createdAt     DateTime @default(now())
+  match         Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@id([matchId, playerId])
   @@unique([matchId, sortOrder])
@@ -221,6 +244,11 @@ enum VideoStorageStatus {
   UPLOADING
   READY
   FAILED
+}
+
+enum HomeAway {
+  HOME
+  AWAY
 }
 
 model PlayerAction {

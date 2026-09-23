@@ -32,6 +32,7 @@ export async function POST(request: Request) {
       roundName: body.roundName?.trim() || null,
       venue: body.venue?.trim() || null,
       notes: body.notes?.trim() || null,
+      homeAway: body.homeAway === "AWAY" ? "AWAY" : "HOME",
       firstHalfAttacksRight: body.firstHalfAttacksRight !== false,
       clubId: clientClub.id,
       opponentClubId: opponent.id,

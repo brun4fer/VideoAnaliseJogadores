@@ -54,6 +54,7 @@ export function NewMatchForm() {
         <Field label="Date"><Input name="matchDate" type="date"/></Field>
         <Field label="Round"><Input name="roundName" placeholder="Round 1"/></Field>
         <Field label="Venue"><Input name="venue" placeholder="Stadium / pitch"/></Field>
+        <Field label="Home / away"><Select name="homeAway" defaultValue="HOME"><option value="HOME">Home</option><option value="AWAY">Away</option></Select></Field>
         <Field label="First-half attack direction"><Select value={firstHalfAttacksRight ? "right" : "left"} onChange={(event) => setFirstHalfAttacksRight(event.target.value === "right")}><option value="right">Left to right →</option><option value="left">← Right to left</option></Select></Field>
         <div className="sm:col-span-2 lg:col-span-3"><Field label="Notes"><TextArea className="min-h-16" name="notes" placeholder="Match notes"/></Field></div>
       </Panel>

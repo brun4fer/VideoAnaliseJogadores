@@ -66,3 +66,17 @@ npm run images:migrate
 ```
 
 O comando valida o conteúdo real de cada imagem, mantém um limite de 10 MB e preserva a URL anterior quando uma cópia falha. Deve ser executado apenas depois de o novo deployment estar `Ready`, porque atualiza as URLs da base de dados para as novas rotas privadas da aplicação.
+
+## Sincronização com FootballOurPlayers
+
+No ecrã de análise existe o botão `Sync`. O ecrã de revisão permite enviar
+separadamente a época, a competição e a equipa/plantel. A sincronização do jogo
+completo exige os minutos de todos os jogadores, todas as ocorrências
+classificadas e uma confirmação final do resumo.
+
+A ligação é feita pelo próprio utilizador. No FootballOurPlayers, abrir
+`Administração → Integrações`, criar um código temporário e colá-lo no painel
+FootballOurPlayers do ecrã `Structure`. O código expira ao fim de 30 minutos e
+só pode ser utilizado uma vez. A credencial permanente é trocada entre os dois
+servidores, nunca é mostrada no browser e pode ser revogada em qualquer uma das
+aplicações. Não são necessárias variáveis de ambiente específicas por conta.
