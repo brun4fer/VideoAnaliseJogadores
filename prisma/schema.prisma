@@ -154,6 +154,7 @@ model Player {
   position        String?
   isGoalkeeper    Boolean        @default(false)
   active          Boolean        @default(true)
+  footballSyncedAt DateTime?
   clubId          String
   workspaceId     String
   createdAt       DateTime       @default(now())

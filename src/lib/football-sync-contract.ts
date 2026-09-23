@@ -30,7 +30,7 @@ export const footballStatLabels: Record<string, string> = {
   incompleteSaves: "Incomplete saves", shotsConceded: "Shots faced", goalsConceded: "Goals conceded",
 };
 
-export type FootballSyncKind = "season" | "competition" | "team" | "match";
+export type FootballSyncKind = "season" | "competition" | "team" | "player" | "match";
 export type FootballPlayerSummary = {
   id: string;
   name: string;
