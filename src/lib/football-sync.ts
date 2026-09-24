@@ -71,6 +71,7 @@ export async function buildFootballSyncPreview(matchId: string, workspaceId: str
     team: { id: match.club.id, name: match.club.name, syncedAt: match.club.footballSyncedAt?.toISOString() || null, playerCount: match.club.players.length },
     opponent: { id: match.opponentClub.id, name: match.opponentClub.name },
     players,
+    playersWithoutIdentifiedMoments: players.filter((player) => player.totalActions === 0).map((player) => player.name),
     totalActions: players.reduce((sum, player) => sum + player.totalActions, 0),
     unclassifiedOccurrences,
   };

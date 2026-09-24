@@ -46,10 +46,6 @@ export async function POST(request: Request, context: { params: Promise<{ matchI
           data: { minutesPlayed: item.value },
         })),
       ]);
-      const preview = await buildFootballSyncPreview(matchId, workspace.id);
-      if (preview.unclassifiedOccurrences > 0) {
-        return badRequest(`${preview.unclassifiedOccurrences} recorded occurrences still need to be classified before synchronization.`);
-      }
     }
 
     const payload = await buildFootballPayload(matchId, workspace.id, kind);
@@ -68,6 +64,7 @@ export async function POST(request: Request, context: { params: Promise<{ matchI
         prisma.season.update({ where: { id: match.competition.seasonId }, data: { footballSyncedAt: now } }),
         prisma.competition.update({ where: { id: match.competitionId }, data: { footballSyncedAt: now } }),
         prisma.club.update({ where: { id: match.clubId }, data: { footballSyncedAt: now } }),
+        prisma.club.update({ where: { id: match.opponentClubId }, data: { footballSyncedAt: now } }),
         prisma.player.updateMany({ where: { id: { in: match.squad.map((item) => item.playerId) } }, data: { footballSyncedAt: now } }),
         prisma.match.update({ where: { id: match.id }, data: { footballSyncedAt: now } }),
       ]);

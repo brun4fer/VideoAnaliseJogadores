@@ -30,7 +30,7 @@ export const footballStatLabels: Record<string, string> = {
   incompleteSaves: "Incomplete saves", shotsConceded: "Shots faced", goalsConceded: "Goals conceded",
 };
 
-export type FootballSyncKind = "season" | "competition" | "team" | "player" | "match";
+export type FootballSyncKind = "season" | "competition" | "team" | "player" | "opponent" | "match";
 export type FootballPlayerSummary = {
   id: string;
   name: string;
@@ -57,6 +57,7 @@ export type FootballSyncPreview = {
   team: { id: string; name: string; syncedAt: string | null; playerCount: number };
   opponent: { id: string; name: string };
   players: FootballPlayerSummary[];
+  playersWithoutIdentifiedMoments: string[];
   totalActions: number;
   unclassifiedOccurrences: number;
 };

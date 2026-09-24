@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CalendarDays, CheckCircle2, ExternalLink, Loader2, RefreshCw, ShieldAlert, Trophy, UsersRound } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 
 import { Badge, Button, Input, Label, Panel, Select } from "@/components/ui";
 import {
@@ -43,16 +43,16 @@ export function FootballSyncWorkspace({ matchId }: { matchId: string }) {
     return minutes[player.id] !== "" && Number.isInteger(value) && value >= 0 && value <= 180;
   }) ?? false, [minutes, preview]);
 
-  async function synchronize(kind: FootballSyncKind) {
-    setBusy(kind); setError(null); setMessage(null); setDestinationUrl(null);
+  async function synchronize() {
+    setBusy("match"); setError(null); setMessage(null); setDestinationUrl(null);
     try {
       const result = await apiFetch<SyncResponse>(`/api/matches/${matchId}/football-sync`, {
         method: "POST",
-        body: JSON.stringify({ kind, ...(kind === "match" ? { minutes, homeAway, confirmed } : {}) }),
+        body: JSON.stringify({ kind: "match", minutes, homeAway, confirmed }),
       });
       setPreview(result.preview);
       setDestinationUrl(result.remote.destinationUrl || null);
-      setMessage(kind === "match" ? "The complete match and its statistics were synchronized." : `${kindLabel(kind)} synchronized successfully.`);
+      setMessage("The complete match and its statistics were synchronized.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Synchronization failed.");
     } finally {
@@ -64,8 +64,15 @@ export function FootballSyncWorkspace({ matchId }: { matchId: string }) {
   const blockers = [
     !preview.configured ? "This workspace is not linked to FootballOurPlayers." : null,
     !preview.match.date ? "The match date is missing." : null,
-    preview.unclassifiedOccurrences ? `${preview.unclassifiedOccurrences} occurrences are still unclassified.` : null,
     !minutesComplete ? "Enter minutes played for every squad player." : null,
+  ].filter(Boolean) as string[];
+  const warnings = [
+    preview.playersWithoutIdentifiedMoments.length
+      ? `No identified moments for: ${preview.playersWithoutIdentifiedMoments.join(", ")}. These players will be synchronized with zero statistics.`
+      : null,
+    preview.unclassifiedOccurrences
+      ? `${preview.unclassifiedOccurrences} recorded ${preview.unclassifiedOccurrences === 1 ? "moment is" : "moments are"} still unclassified and will not contribute to the statistics.`
+      : null,
   ].filter(Boolean) as string[];
 
   return <div className="mx-auto max-w-6xl space-y-4">
@@ -74,7 +81,7 @@ export function FootballSyncWorkspace({ matchId }: { matchId: string }) {
         <Link href={`/analysis/${matchId}`} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-white"><ArrowLeft size={13}/>Back to analysis</Link>
         <Label className="mt-4 block">FootballOurPlayers</Label>
         <h1 className="mt-1 text-2xl font-bold text-white">Review and synchronize</h1>
-        <p className="mt-1 text-sm text-slate-400">Send each structure separately or confirm the complete analysed match.</p>
+        <p className="mt-1 text-sm text-slate-400">Review the minutes and statistical summary before sending the complete analysed match.</p>
       </div>
       {destinationUrl ? <a href={destinationUrl} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-cyan-300 px-4 text-sm font-semibold text-slate-950 hover:bg-cyan-200">Open FootballOurPlayers<ExternalLink size={15}/></a> : null}
     </div>
@@ -82,12 +89,6 @@ export function FootballSyncWorkspace({ matchId }: { matchId: string }) {
     {!preview.configured ? <Panel className="border-amber-300/25 bg-amber-300/10 p-4 text-sm text-amber-100"><div className="flex gap-3"><ShieldAlert className="shrink-0" size={20}/><div><p className="font-semibold">Workspace not linked</p><p className="mt-1 text-xs text-amber-100/70">Open Structure, paste a linking code created in FootballOurPlayers, then return here.</p><Link href="/structure" className="mt-2 inline-block text-xs font-semibold text-cyan-200 hover:text-cyan-100">Open Structure</Link></div></div></Panel> : null}
     {message ? <Panel className="border-emerald-300/25 bg-emerald-300/10 p-3 text-sm text-emerald-100"><CheckCircle2 className="mr-2 inline" size={16}/>{message}</Panel> : null}
     {error ? <Panel className="border-red-400/25 bg-red-500/10 p-3 text-sm text-red-100">{error}</Panel> : null}
-
-    <div className="grid gap-3 md:grid-cols-3">
-      <SyncCard icon={CalendarDays} label="Season" value={preview.season.name} syncedAt={preview.season.syncedAt} busy={busy === "season"} disabled={Boolean(busy) || !preview.configured} onSync={() => void synchronize("season")}/>
-      <SyncCard icon={Trophy} label="Competition" value={preview.competition.name} syncedAt={preview.competition.syncedAt} busy={busy === "competition"} disabled={Boolean(busy) || !preview.configured} onSync={() => void synchronize("competition")}/>
-      <SyncCard icon={UsersRound} label="Team and squad" value={`${preview.team.name} · ${preview.team.playerCount} players`} syncedAt={preview.team.syncedAt} busy={busy === "team"} disabled={Boolean(busy) || !preview.configured} onSync={() => void synchronize("team")}/>
-    </div>
 
     <Panel className="overflow-hidden">
       <div className="border-b border-white/10 p-4">
@@ -112,17 +113,10 @@ export function FootballSyncWorkspace({ matchId }: { matchId: string }) {
 
       <div className="border-t border-white/10 bg-black/10 p-4">
         {blockers.length ? <div className="mb-4 rounded-md border border-amber-300/20 bg-amber-300/10 p-3"><p className="text-xs font-semibold text-amber-100">Complete these items before synchronizing:</p><ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-100/70">{blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul></div> : null}
+        {warnings.length ? <div className="mb-4 rounded-md border border-amber-300/20 bg-amber-300/10 p-3"><p className="flex items-center gap-2 text-xs font-semibold text-amber-100"><AlertTriangle size={14}/>Warnings — synchronization is still allowed</p><ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-100/70">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div> : null}
         <label className="flex items-start gap-3 rounded-md border border-white/10 bg-white/[.035] p-3 text-sm text-slate-300"><input type="checkbox" className="mt-0.5 h-4 w-4 accent-cyan-300" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)}/><span>I confirm that the match, squad, minutes and statistical summary above are correct. Re-synchronizing will replace the previous statistics for this match.</span></label>
-        <div className="mt-4 flex justify-end"><Button variant="primary" size="lg" disabled={Boolean(busy) || blockers.length > 0 || !confirmed} onClick={() => void synchronize("match")}>{busy === "match" ? <Loader2 size={16} className="animate-spin"/> : <RefreshCw size={16}/>}Synchronize complete match</Button></div>
+        <div className="mt-4 flex justify-end"><Button variant="primary" size="lg" disabled={Boolean(busy) || blockers.length > 0 || !confirmed} onClick={() => void synchronize()}>{busy === "match" ? <Loader2 size={16} className="animate-spin"/> : <RefreshCw size={16}/>}Synchronize complete match</Button></div>
       </div>
     </Panel>
   </div>;
-}
-
-function kindLabel(kind: FootballSyncKind) {
-  return kind === "season" ? "Season" : kind === "competition" ? "Competition" : kind === "team" ? "Team and squad" : "Match";
-}
-
-function SyncCard({ icon: Icon, label, value, syncedAt, busy, disabled, onSync }: { icon: typeof CalendarDays; label: string; value: string; syncedAt: string | null; busy: boolean; disabled: boolean; onSync: () => void }) {
-  return <Panel className="p-4"><div className="flex items-start justify-between gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-md bg-cyan-300/10 text-cyan-200"><Icon size={18}/></span>{syncedAt ? <Badge className="border-emerald-300/20 text-emerald-200">Synced</Badge> : <Badge>Not synced</Badge>}</div><Label className="mt-4 block">{label}</Label><p className="mt-1 min-h-10 text-sm font-semibold text-white">{value}</p><p className="mt-1 text-[11px] text-slate-500">{syncedAt ? `Last sync: ${new Date(syncedAt).toLocaleString()}` : "Send only this structure."}</p><Button className="mt-4 w-full" disabled={disabled} onClick={onSync}>{busy ? <Loader2 size={14} className="animate-spin"/> : <RefreshCw size={14}/>}Synchronize {label.toLowerCase()}</Button></Panel>;
 }

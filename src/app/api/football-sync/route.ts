@@ -7,9 +7,9 @@ export async function POST(request: Request) {
   try {
     const { workspace } = await requireAreaAccount("squad");
     const body = await request.json();
-    const kind = body.kind as "season" | "competition" | "team" | "player";
+    const kind = body.kind as "season" | "competition" | "team" | "player" | "opponent";
     const id = typeof body.id === "string" ? body.id : "";
-    if (!id || !["season", "competition", "team", "player"].includes(kind)) return badRequest("Select a valid item to synchronize.");
+    if (!id || !["season", "competition", "team", "player", "opponent"].includes(kind)) return badRequest("Select a valid item to synchronize.");
 
     if (kind === "season") {
       const season = await prisma.season.findFirst({ where: { id, workspaceId: workspace.id } });
@@ -42,6 +42,31 @@ export async function POST(request: Request) {
         prisma.season.update({ where: { id: competition.seasonId }, data: { footballSyncedAt: now } }),
         prisma.competition.update({ where: { id: competition.id }, data: { footballSyncedAt: now } }),
       ]);
+      return ok({ synchronized: true, kind, remote });
+    }
+
+    if (kind === "opponent") {
+      const competitionId = typeof body.competitionId === "string" ? body.competitionId : "";
+      if (!competitionId) return badRequest("Select the competition for this opponent.");
+      const [opponent, competition] = await Promise.all([
+        prisma.club.findFirst({
+          where: { id, workspaceId: workspace.id, isClientClub: false, competitions: { some: { id: competitionId } } },
+        }),
+        prisma.competition.findFirst({
+          where: { id: competitionId, workspaceId: workspace.id },
+          include: { season: true },
+        }),
+      ]);
+      if (!opponent || !competition) return notFound("Opponent or competition not found.");
+      const remote = await sendFootballPayload({
+        version: 1,
+        kind,
+        sourceWorkspaceId: workspace.id,
+        season: { id: competition.season.id, name: competition.season.name },
+        competition: { id: competition.id, name: competition.name },
+        opponent: { id: opponent.id, name: opponent.name },
+      }, workspace.id);
+      await prisma.club.update({ where: { id: opponent.id }, data: { footballSyncedAt: new Date() } });
       return ok({ synchronized: true, kind, remote });
     }
 
