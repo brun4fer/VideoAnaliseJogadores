@@ -11,8 +11,8 @@ export async function GET(request: Request) {
     const { workspace } = await requireAreaAccount(area);
     const [players, occurrences, matches, competitions] = await Promise.all([
       prisma.player.findMany({ where: { workspaceId: workspace.id, club: { isClientClub: true } }, orderBy: { name: "asc" }, include: { club: true } }),
-      prisma.playerAction.findMany({ where: { match: { workspaceId: workspace.id } }, orderBy: { eventTimeSeconds: "asc" }, include: { subActions: { orderBy: { eventTimeSeconds: "asc" } }, player: { include: { club: true } }, match: { include: { club: true, opponentClub: true, competition: { include: { season: true } }, video: true } } } }),
-      prisma.match.findMany({ where: { workspaceId: workspace.id }, orderBy: { matchDate: "desc" }, include: { club: true, opponentClub: true, competition: { include: { season: true } }, video: true } }),
+      prisma.playerAction.findMany({ where: { match: { workspaceId: workspace.id } }, orderBy: { eventTimeSeconds: "asc" }, include: { subActions: { orderBy: { eventTimeSeconds: "asc" } }, player: { include: { club: true } }, match: { include: { club: true, opponentClub: true, competition: { include: { season: true } }, video: true, scoreEvents: { orderBy: [{ timeSeconds: "asc" }, { createdAt: "asc" }] } } } } }),
+      prisma.match.findMany({ where: { workspaceId: workspace.id }, orderBy: { matchDate: "desc" }, include: { club: true, opponentClub: true, competition: { include: { season: true } }, video: true, scoreEvents: { orderBy: [{ timeSeconds: "asc" }, { createdAt: "asc" }] } } }),
       prisma.competition.findMany({ where: { workspaceId: workspace.id }, orderBy: { name: "asc" }, include: { season: true } }),
     ]);
     const serializeRowVideo = <T extends { video: Parameters<typeof serializeVideo>[0] | null }>(row: T) => ({ ...row, video: row.video ? serializeVideo(row.video) : null });

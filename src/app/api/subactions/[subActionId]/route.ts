@@ -6,17 +6,23 @@ import { roundTime } from "@/lib/time";
 
 export async function PATCH(request: Request, context: { params: Promise<{ subActionId: string }> }) {
   try {
-    const { workspace } = await requireAreaAccount("analysis");
+    const { workspace } = await requireAreaAccount(["analysis", "maps", "reports"]);
     const { subActionId } = await context.params;
     const body = await request.json();
     const current = await prisma.playerSubAction.findFirst({ where: { id: subActionId, playerAction: { match: { workspaceId: workspace.id } } }, include: { playerAction: { include: { player: true } } } });
     if (!current) return badRequest("Invalid subaction.");
     const type = body.actionKey ? actionTypeByKey.get(String(body.actionKey)) : actionTypeByKey.get(current.actionKey);
     if (!type || !actionsForPlayer(current.playerAction.player.isGoalkeeper).some((item) => item.key === type.key)) return badRequest("This action is not available for the selected player.");
+    if (body.outcome !== undefined && body.outcome !== null && body.outcome !== "positive" && body.outcome !== "negative") return badRequest("The result must be positive, negative or empty.");
     const eventTime = body.eventTimeSeconds === undefined ? current.eventTimeSeconds : Number(body.eventTimeSeconds);
     if (!Number.isFinite(eventTime) || eventTime < current.playerAction.startTimeSeconds || eventTime > current.playerAction.endTimeSeconds) return badRequest("The action time must be inside the occurrence clip.");
+    const outcome = body.outcome !== undefined
+      ? body.outcome
+      : body.actionKey !== undefined
+        ? type.outcome || null
+        : current.outcome;
     return ok(await prisma.playerSubAction.update({ where: { id: current.id }, data: {
-      actionKey: type.key, actionName: type.name, outcome: type.outcome || null, eventTimeSeconds: roundTime(eventTime),
+      actionKey: type.key, actionName: type.name, outcome, eventTimeSeconds: roundTime(eventTime),
       ...(body.fieldX !== undefined ? { fieldX: numberOrNull(body.fieldX) } : {}),
       ...(body.fieldY !== undefined ? { fieldY: numberOrNull(body.fieldY) } : {}),
       ...(body.notes !== undefined ? { notes: body.notes?.trim() || null } : {}),

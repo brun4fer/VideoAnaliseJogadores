@@ -7,7 +7,7 @@ import { roundTime } from "@/lib/time";
 
 export async function PATCH(request: Request, context: { params: Promise<{ actionId: string }> }) {
   try {
-    const { workspace } = await requireAreaAccount("analysis");
+    const { workspace } = await requireAreaAccount(["analysis", "maps", "reports"]);
     const { actionId } = await context.params;
     const body = await request.json();
     const existing = await prisma.playerAction.findFirst({
@@ -38,6 +38,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ actio
       const allowedActionKeys = new Set(actionsForPlayer(player.isGoalkeeper).map((item) => item.key));
       if (existing.subActions.some((item) => !allowedActionKeys.has(item.actionKey))) return badRequest("This player cannot use one or more of the saved subactions.");
     }
+    if (body.outcome !== undefined && body.outcome !== null && body.outcome !== "positive" && body.outcome !== "negative") {
+      return badRequest("The result must be positive, negative or empty.");
+    }
 
     return ok(await prisma.playerAction.update({ where: { id: actionId }, data: {
       ...(body.playerId !== undefined ? { playerId: player.id } : {}),
@@ -48,6 +51,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ actio
         period: getMatchPeriodAtTime(existing.match, eventTimeSeconds),
       } : {}),
       ...(body.notes !== undefined ? { notes: body.notes?.trim() || null } : {}),
+      ...(body.outcome !== undefined ? { outcome: body.outcome } : {}),
     }, include: { player: true, subActions: { orderBy: { eventTimeSeconds: "asc" } } } }));
   } catch (error) { return serverError(error); }
 }

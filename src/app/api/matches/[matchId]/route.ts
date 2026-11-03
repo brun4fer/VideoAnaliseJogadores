@@ -9,6 +9,7 @@ import { abortMediaMultipartUpload } from "@/lib/media-r2";
 import { ensureMediaWorkspace } from "@/lib/media-workspace";
 import { abortMultipartUpload, deleteR2Object } from "@/lib/r2";
 import { serializeVideo } from "@/lib/video";
+import { validateScoreboardSettings } from "@/lib/scoreboard";
 
 const matchInclude = {
   club: { include: { players: { where: { active: true }, orderBy: [{ shirtNumber: "asc" as const }, { name: "asc" as const }] } } },
@@ -17,6 +18,7 @@ const matchInclude = {
   competition: { include: { season: true } },
   video: true,
   playerActions: { orderBy: { eventTimeSeconds: "asc" as const }, include: { player: true, subActions: { orderBy: { eventTimeSeconds: "asc" as const } } } },
+  scoreEvents: { orderBy: [{ timeSeconds: "asc" as const }, { createdAt: "asc" as const }] },
 };
 
 const lineupGroups = ["goalkeepers", "defenders", "midfielders", "forwards", "substitutes"] as const;
@@ -66,10 +68,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ match
       try { validatePeriodMarkers(nextMarkers); }
       catch (error) { return badRequest(error instanceof Error ? error.message : "Invalid match period markers."); }
     }
+    let scoreboardData;
+    try { scoreboardData = validateScoreboardSettings(body); }
+    catch (error) { return badRequest(error instanceof Error ? error.message : "Invalid scoreboard settings."); }
 
     const updated = await prisma.$transaction(async (transaction) => {
       await transaction.match.update({ where: { id: existing.id }, data: {
-        competitionId, opponentClubId, ...markerData,
+        competitionId, opponentClubId, ...markerData, ...scoreboardData,
         ...(body.matchDate !== undefined ? { matchDate: body.matchDate ? new Date(body.matchDate) : null } : {}),
         ...(body.roundName !== undefined ? { roundName: body.roundName?.trim() || null } : {}),
         ...(body.venue !== undefined ? { venue: body.venue?.trim() || null } : {}),

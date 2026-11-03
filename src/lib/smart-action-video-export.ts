@@ -21,6 +21,8 @@ import {
   type ExportableAction,
 } from "@/lib/action-video-export";
 import { formatTime } from "@/lib/time";
+import type { MatchDetail } from "@/lib/domain";
+import { formatMatchClock, matchClockSeconds, scoreAtTime } from "@/lib/scoreboard";
 
 export type SmartActionExportMode = "direct" | "webcodecs" | "compatibility";
 
@@ -54,12 +56,19 @@ export class SmartActionVideoExportSession {
     action: ExportableAction,
     matchName: string,
     onStatus?: (status: string) => void,
+    options: { includeAudio?: boolean; scoreboardMatch?: MatchDetail | null } = {},
   ): Promise<SmartActionExportResult> {
     await this.validate();
 
+    if (options.scoreboardMatch?.scoreboardEnabled) {
+      onStatus?.("Rendering the scoreboard and match clock...");
+      const legacy = await exportActionClipCompatibility(this.fallbackUrl, action, matchName, onStatus, { includeAudio: options.includeAudio !== false, drawOverlay: (context, width, height, time) => drawScoreboardOverlay(context, width, height, options.scoreboardMatch!, time) });
+      return { ...legacy, mode: "compatibility" };
+    }
+
     onStatus?.("Checking whether the clip can be copied without re-encoding...");
     try {
-      const direct = await this.tryDirectExport(action, matchName, onStatus);
+      const direct = await this.tryDirectExport(action, matchName, onStatus, options.includeAudio !== false);
       if (direct) return direct;
     } catch (error) {
       console.info("Direct action export was not possible. Trying WebCodecs.", error);
@@ -67,13 +76,13 @@ export class SmartActionVideoExportSession {
 
     onStatus?.("Encoding the exact action clip with WebCodecs...");
     try {
-      return await this.exportWithWebCodecs(action, matchName, onStatus);
+      return await this.exportWithWebCodecs(action, matchName, onStatus, options.includeAudio !== false);
     } catch (error) {
       console.info("WebCodecs action export was not possible. Trying compatibility mode.", error);
     }
 
     onStatus?.("Using browser compatibility mode...");
-    const legacy = await exportActionClipCompatibility(this.fallbackUrl, action, matchName, onStatus);
+    const legacy = await exportActionClipCompatibility(this.fallbackUrl, action, matchName, onStatus, { includeAudio: options.includeAudio !== false });
     return { ...legacy, mode: "compatibility" };
   }
 
@@ -105,11 +114,12 @@ export class SmartActionVideoExportSession {
     action: ExportableAction,
     matchName: string,
     onStatus?: (status: string) => void,
+    includeAudio = true,
   ): Promise<SmartActionExportResult | null> {
     const videoTrack = await this.getVideoTrack();
     if (!videoTrack) return null;
 
-    const audioTrack = await this.getAudioTrack();
+    const audioTrack = includeAudio ? await this.getAudioTrack() : null;
     const format = new Mp4OutputFormat({ fastStart: "in-memory" });
     const videoCodec = await videoTrack.getCodec();
     const audioCodec = await audioTrack?.getCodec();
@@ -199,6 +209,7 @@ export class SmartActionVideoExportSession {
     action: ExportableAction,
     matchName: string,
     onStatus?: (status: string) => void,
+    includeAudio = true,
   ): Promise<SmartActionExportResult> {
     if (typeof VideoEncoder === "undefined" || typeof VideoDecoder === "undefined") {
       throw new Error("WebCodecs is not available in this browser.");
@@ -219,7 +230,7 @@ export class SmartActionVideoExportSession {
         keyFrameInterval: 2,
         hardwareAcceleration: "no-preference",
       },
-      audio: { codec: "aac", bitrate: 160_000 },
+      audio: includeAudio ? { codec: "aac", bitrate: 160_000 } : { discard: true },
       showWarnings: false,
     });
 
@@ -298,3 +309,18 @@ async function copyAudioPackets({ sink, source, start, end, metadata }: AudioPac
 function buildActionClipFileName(matchName: string, action: ExportableAction) {
   return `${safe(matchName)}-${safe(action.player.name)}-${safe(action.actionName)}-${formatTime(action.startTimeSeconds).replace(/:/g, "-")}.mp4`;
 }
+
+function drawScoreboardOverlay(context: CanvasRenderingContext2D, width: number, height: number, match: MatchDetail, time: number) {
+  const score = scoreAtTime(match.scoreEvents || [], time); const defaults = match.homeAway === "HOME" ? { home: match.club.name, away: match.opponentClub.name } : { home: match.opponentClub.name, away: match.club.name };
+  const home = teamCode(match.homeClubShortName || match.homeClubName || defaults.home); const away = teamCode(match.awayClubShortName || match.awayClubName || defaults.away); const clock = formatMatchClock(matchClockSeconds(match, time));
+  const scale = Math.max(.7, width / 1280); const x = width - 330 * scale; const y = 28 * scale; const h = 42 * scale;
+  context.save(); context.font = `700 ${16 * scale}px sans-serif`; context.textAlign = "center"; context.textBaseline = "middle";
+  context.fillStyle = "#ffffff"; context.fillRect(x, y, 70 * scale, h); context.fillStyle = "#111827"; context.fillText(clock, x + 35 * scale, y + h / 2);
+  context.fillStyle = match.homeTeamColor; context.fillRect(x + 70 * scale, y, 75 * scale, h); context.fillStyle = readableText(match.homeTeamColor); context.fillText(home, x + 107.5 * scale, y + h / 2);
+  context.fillStyle = "#f1f5f9"; context.fillRect(x + 145 * scale, y, 90 * scale, h); context.fillStyle = "#111827"; context.fillText(`${score.homeScore} - ${score.awayScore}`, x + 190 * scale, y + h / 2);
+  context.fillStyle = match.awayTeamColor; context.fillRect(x + 235 * scale, y, 75 * scale, h); context.fillStyle = readableText(match.awayTeamColor); context.fillText(away, x + 272.5 * scale, y + h / 2);
+  const drawCards = (count: number, startX: number) => { context.fillStyle = "#dc2626"; for (let index = 0; index < count; index++) context.fillRect(startX + index * 7 * scale, y - 5 * scale, 5 * scale, 15 * scale); };
+  drawCards(score.homeRedCards, x + 75 * scale); drawCards(score.awayRedCards, x + 240 * scale); context.restore();
+}
+function teamCode(value: string) { const normalized = value.trim().toUpperCase(); if (normalized.length <= 4) return normalized; const initials = normalized.split(/\s+/).map((part) => part[0]).join(""); return (initials.length > 1 ? initials : normalized).slice(0, 4); }
+function readableText(color: string) { const value = color.replace("#", ""); const [r, g, b] = [0, 2, 4].map((i) => Number.parseInt(value.slice(i, i + 2), 16)); return r * .299 + g * .587 + b * .114 > 160 ? "#111827" : "#ffffff"; }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
-import { Archive, ArrowLeft, ChevronLeft, ChevronRight, Clock3, Cloud, FileVideo, FolderOpen, GripVertical, Loader2, Pause, Pencil, Play, RefreshCw, Tags, Trash2, Upload, UserRound, X } from "lucide-react";
+import { Archive, ArrowLeft, ChevronLeft, ChevronRight, Clock3, Cloud, FileVideo, FolderOpen, GripVertical, Loader2, Pause, Pencil, Play, RefreshCw, Settings2, Tags, Trash2, Upload, UserRound, X } from "lucide-react";
 import JSZip from "jszip";
 
 import { Badge, Button, Label, Panel } from "@/components/ui";
@@ -19,6 +19,10 @@ import { playerPositionGroup, playerPositionLabel, type PlayerPositionGroup } fr
 import { attachCloudVideo, getCloudVideoLibrary, getRemoteVideoUrl, uploadMatchVideo, type CloudVideoAsset } from "@/lib/remote-video-store";
 import { SmartActionVideoExportSession } from "@/lib/smart-action-video-export";
 import { formatTime, roundTime } from "@/lib/time";
+import { BroadcastScoreboard } from "@/components/broadcast-scoreboard";
+import { ScoreboardSettings } from "@/components/scoreboard-settings";
+import { useSoundPreference, VideoAudioToggle } from "@/components/video-audio-toggle";
+import type { BroadcastState } from "@/lib/scoreboard";
 
 export function AnalysisWorkspace({ matchId }: { matchId: string }) {
   const router = useRouter();
@@ -50,6 +54,11 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
   const [loadingCloudLibrary, setLoadingCloudLibrary] = useState(false);
   const [cloudLibraryError, setCloudLibraryError] = useState<string | null>(null);
   const [attachingAssetId, setAttachingAssetId] = useState<string | null>(null);
+  const [showScoreboardSettings, setShowScoreboardSettings] = useState(false);
+  const [scoreSaving, setScoreSaving] = useState(false);
+  const [exportAudio, setExportAudio] = useState(true);
+  const [includeScoreboard, setIncludeScoreboard] = useState(true);
+  const { soundEnabled, setSoundEnabled } = useSoundPreference();
 
   const load = useCallback(async () => {
     try { const data = await apiFetch<MatchDetail>(`/api/matches/${matchId}`); setMatch(data); return data; }
@@ -214,6 +223,27 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
     } catch (error) { setNotice(error instanceof Error ? error.message : "Could not remove the last occurrence."); }
   }
 
+  async function saveScore(score: BroadcastState) {
+    if (!match || scoreSaving) return;
+    setScoreSaving(true);
+    try {
+      const saved = await apiFetch<MatchDetail["scoreEvents"][number]>(`/api/matches/${match.id}/score-events`, { method: "POST", body: JSON.stringify({ timeSeconds: roundTime(currentTime), ...score }) });
+      setMatch({ ...match, scoreEvents: [...match.scoreEvents, saved].sort((a, b) => a.timeSeconds - b.timeSeconds) });
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not save the scoreboard."); }
+    finally { setScoreSaving(false); }
+  }
+
+  async function undoScore() {
+    if (!match?.scoreEvents.length || scoreSaving) return;
+    const latest = [...match.scoreEvents].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    setScoreSaving(true);
+    try {
+      await apiFetch(`/api/matches/${match.id}/score-events?eventId=${encodeURIComponent(latest.id)}`, { method: "DELETE" });
+      setMatch({ ...match, scoreEvents: match.scoreEvents.filter((event) => event.id !== latest.id) });
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not undo the scoreboard change."); }
+    finally { setScoreSaving(false); }
+  }
+
   async function exportActions(actions: ActionRecord[]) {
     if (!match || !actions.length || exporting) return;
     const localFile = await getRememberedMatchVideo(match.id).catch(() => null);
@@ -235,7 +265,7 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
         const folders = names.length ? names : ["Unclassified"];
         const label = names.join(" + ") || "Unclassified";
         setExportStatus(`Exporting ${index + 1} of ${actions.length}: ${action.player.name}`);
-        const result = await exportSession.exportActionClip({ ...action, actionName: label }, matchName, (status) => setExportStatus(`${index + 1}/${actions.length} · ${status}`));
+        const result = await exportSession.exportActionClip({ ...action, actionName: label }, matchName, (status) => setExportStatus(`${index + 1}/${actions.length} · ${status}`), { includeAudio: exportAudio, scoreboardMatch: includeScoreboard ? match : null });
         const fileName = `${String(index + 1).padStart(3, "0")}-${result.fileName}`;
         const paths = folders.map((folder) => `${safe(action.player.name)}/${safe(folder)}/${fileName}`);
         for (const path of paths) {
@@ -269,8 +299,9 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
     {notice || exporting ? <div role="status" className="fixed bottom-3 right-3 z-50 flex max-w-sm gap-3 rounded-lg border border-cyan-300/25 bg-pitch-950/95 px-3 py-2 text-xs text-cyan-100 shadow-2xl"><span>{exporting ? exportStatus : notice}</span>{!exporting ? <button onClick={() => setNotice(null)}><X size={14}/></button> : null}</div> : null}
 
     <PlayerRail squad={match.squad} taggingPlayerIds={taggingPlayerIds} recentPlayerId={recentPlayerId} onTag={tagPlayer} onReorder={savePlayerLayout} videoControl={<div className="flex items-center gap-1"><Button size="icon" className="h-7 w-7" variant={uploading ? "danger" : "secondary"} title={uploading ? `Cancel upload (${Math.round(uploadProgress * 100)}%)` : "Upload new video"} aria-label={uploading ? "Cancel video upload" : "Upload new video"} onClick={() => uploading ? uploadAbort.current?.abort() : fileRef.current?.click()}>{uploading ? <Loader2 size={12} className="animate-spin"/> : <Upload size={12}/>}</Button><Button size="icon" className="h-7 w-7" variant="secondary" title="Open cloud library" aria-label="Open cloud library" disabled={uploading} onClick={() => void openCloudLibrary()}><Cloud size={12}/></Button></div>}/>
+    <Panel className="flex flex-wrap items-center gap-4 px-3 py-2 text-xs text-slate-300"><Label>Export options</Label><label className="flex items-center gap-2"><input type="checkbox" checked={exportAudio} onChange={(event) => setExportAudio(event.target.checked)}/>Include sound</label><label className="flex items-center gap-2"><input type="checkbox" checked={includeScoreboard} onChange={(event) => setIncludeScoreboard(event.target.checked)}/>Include scoreboard when enabled</label></Panel>
     <div ref={videoWorkspaceRef} data-video-workspace className="grid items-start gap-2 xl:grid-cols-[minmax(0,1fr)_19rem]">
-      <div ref={videoPanelRef} className="min-w-0"><VideoPanel sourceUrl={sourceUrl} videoRef={videoRef} duration={duration} currentTime={currentTime} rate={rate} playing={playing} previewEnd={previewEnd} lastAction={lastAction} match={match} currentPeriod={currentPeriod} setDuration={setDuration} setCurrentTime={setCurrentTime} setPlaying={setPlaying} setPreviewEnd={setPreviewEnd} setRate={setRate} seekTo={seekTo} onChoose={() => fileRef.current?.click()} onDeleteLast={() => void removeLastAction(lastAction)} onSetPeriodMarker={setPeriodMarker} identificationControl={<><VideoFullscreenButton targetRef={videoWorkspaceRef}/><Button size="sm" className="h-8 whitespace-nowrap px-2 text-[10px]" onClick={() => router.push(`/analysis/${matchId}/sync`)}><RefreshCw size={13}/>Sync</Button><Button size="sm" variant="primary" className="h-8 whitespace-nowrap px-2 text-[10px]" disabled={!match.playerActions.length} onClick={() => router.push(`/analysis/${matchId}/subactions`)}><Tags size={13}/>Identify subactions</Button></>} onEnded={() => { if (previewEnd === null && match.playerActions.length) setShowIdentifyPrompt(true); }}/></div>
+      <div ref={videoPanelRef} className="min-w-0"><VideoPanel sourceUrl={sourceUrl} videoRef={videoRef} duration={duration} currentTime={currentTime} rate={rate} playing={playing} previewEnd={previewEnd} lastAction={lastAction} match={match} currentPeriod={currentPeriod} soundEnabled={soundEnabled} scoreSaving={scoreSaving} onScoreChange={saveScore} onScoreUndo={undoScore} setDuration={setDuration} setCurrentTime={setCurrentTime} setPlaying={setPlaying} setPreviewEnd={setPreviewEnd} setRate={setRate} seekTo={seekTo} onChoose={() => fileRef.current?.click()} onDeleteLast={() => void removeLastAction(lastAction)} onSetPeriodMarker={setPeriodMarker} identificationControl={<><VideoAudioToggle soundEnabled={soundEnabled} onChange={setSoundEnabled}/><Button size="sm" variant={match.scoreboardEnabled ? "primary" : "secondary"} className="h-8 whitespace-nowrap px-2 text-[10px]" title="Configure scoreboard, badges, score and match clock" onClick={() => setShowScoreboardSettings(true)}><Settings2 size={13}/>Scoreboard {match.scoreboardEnabled ? "on" : "off"}</Button><VideoFullscreenButton targetRef={videoWorkspaceRef}/><Button size="sm" className="h-8 whitespace-nowrap px-2 text-[10px]" onClick={() => router.push(`/analysis/${matchId}/sync`)}><RefreshCw size={13}/>Sync</Button><Button size="sm" variant="primary" className="h-8 whitespace-nowrap px-2 text-[10px]" disabled={!match.playerActions.length} onClick={() => router.push(`/analysis/${matchId}/subactions`)}><Tags size={13}/>Identify subactions</Button></>} onEnded={() => { if (previewEnd === null && match.playerActions.length) setShowIdentifyPrompt(true); }}/></div>
       <RecordedOccurrences actions={filtered} players={players} sideStyle={sideStyle} filterPlayerId={filterPlayerId} exporting={exporting} onFilter={setFilterPlayerId} onPreview={preview} onEdit={(action) => router.push(`/analysis/${matchId}/subactions?action=${encodeURIComponent(action.id)}&editOccurrence=1`)} onDelete={removeAction} onExport={() => void exportActions(filtered)}/>
     </div>
 
@@ -278,6 +309,7 @@ export function AnalysisWorkspace({ matchId }: { matchId: string }) {
 
     {showIdentifyPrompt ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"><Panel className="w-full max-w-md p-5"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-300/10 text-cyan-300"><Tags size={20}/></div><h2 className="mt-4 text-lg font-bold text-white">The video has finished</h2><p className="mt-2 text-sm text-slate-400">Do you want to identify the recorded subactions now?</p><div className="mt-5 flex justify-end gap-2"><Button onClick={() => setShowIdentifyPrompt(false)}>Not now</Button><Button variant="primary" onClick={() => router.push(`/analysis/${matchId}/subactions`)}><Tags size={15}/>Identify subactions</Button></div></Panel></div> : null}
     {showCloudLibrary ? <CloudVideoLibrary assets={cloudAssets} loading={loadingCloudLibrary} error={cloudLibraryError} attachingAssetId={attachingAssetId} onRetry={() => void openCloudLibrary()} onClose={() => !attachingAssetId && setShowCloudLibrary(false)} onSelect={(asset) => void attachSelectedCloudVideo(asset)}/> : null}
+    {showScoreboardSettings ? <ScoreboardSettings match={match} onSaved={(saved) => { setMatch(saved); setShowScoreboardSettings(false); }} onClose={() => setShowScoreboardSettings(false)}/> : null}
   </div>;
 }
 
@@ -341,7 +373,7 @@ function PlayerRail({ squad, taggingPlayerIds, recentPlayerId, onTag, onReorder,
       {playerGroups.map((group, groupIndex) => <div key={group.key} className="flex shrink-0 items-center">
         <div className={`rounded-md px-1.5 py-0.5 transition ${dropGroup === group.key ? "ring-1 ring-white/30" : ""}`} style={dropGroup === group.key ? { backgroundColor: group.surface } : undefined} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropGroup(group.key); }} onDrop={(event) => { event.preventDefault(); movePlayer(group.key); }}>
           <p className="mb-1 text-[8px] font-bold uppercase tracking-[.14em]" style={{ color: group.color }}>{group.label}</p>
-          <div className="flex min-h-12 min-w-10 gap-1.5">{grouped.get(group.key)?.length ? grouped.get(group.key)?.map((player) => <button key={player.id} data-player-id={player.id} draggable type="button" title={`${player.shirtNumber ? `${player.shirtNumber} · ` : ""}${player.name} · ${playerPositionLabel(player.position)} · Click to record · Drag to move`} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; setDraggingId(player.id); suppressClick.current = true; }} onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); setDropGroup(group.key); }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); movePlayer(group.key, player.id); }} onDragEnd={finishDrag} onClick={() => { if (!suppressClick.current) void onTag(player); }} className={`group relative flex h-12 w-12 shrink-0 cursor-grab items-center justify-center overflow-hidden rounded-md border bg-cover bg-center transition active:cursor-grabbing ${draggingId === player.id ? "opacity-40" : ""} ${recentPlayerId === player.id ? "ring-2 ring-emerald-300/60" : "hover:brightness-125"}`} style={{ borderColor: recentPlayerId === player.id ? "#6ee7b7" : `${group.color}80`, backgroundColor: group.surface, ...(player.photoUrl ? { backgroundImage: `url(${player.photoUrl})` } : {}) }}>{!player.photoUrl ? <UserRound size={18} style={{ color: group.color }}/> : null}<GripVertical size={10} className="absolute right-0 top-0 rounded-bl bg-black/70 text-white/80"/>{taggingPlayerIds.includes(player.id) ? <span className="absolute inset-0 flex items-center justify-center bg-black/60"><Loader2 size={15} className="animate-spin text-cyan-200"/></span> : null}</button>) : <span className="pointer-events-none flex h-12 w-10 items-center justify-center rounded border border-dashed text-[8px]" style={{ borderColor: `${group.color}45`, color: `${group.color}90` }}>Drop</span>}</div>
+          <div className="flex min-h-16 min-w-12 gap-1.5">{grouped.get(group.key)?.length ? grouped.get(group.key)?.map((player) => <button key={player.id} data-player-id={player.id} draggable type="button" title={`${player.shirtNumber ? `${player.shirtNumber} · ` : ""}${player.name} · ${playerPositionLabel(player.position)} · Click to record · Drag to move`} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; setDraggingId(player.id); suppressClick.current = true; }} onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); setDropGroup(group.key); }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); movePlayer(group.key, player.id); }} onDragEnd={finishDrag} onClick={() => { if (!suppressClick.current) void onTag(player); }} className={`group relative flex h-16 w-16 shrink-0 cursor-grab items-center justify-center overflow-hidden rounded-md border bg-cover bg-center transition active:cursor-grabbing ${draggingId === player.id ? "opacity-40" : ""} ${recentPlayerId === player.id ? "ring-2 ring-emerald-300/60" : "hover:brightness-125"}`} style={{ borderColor: recentPlayerId === player.id ? "#6ee7b7" : `${group.color}80`, backgroundColor: group.surface, ...(player.photoUrl ? { backgroundImage: `url(${player.photoUrl})` } : {}) }}>{!player.photoUrl ? <UserRound size={24} style={{ color: group.color }}/> : null}<GripVertical size={10} className="absolute right-0 top-0 rounded-bl bg-black/70 text-white/80"/>{taggingPlayerIds.includes(player.id) ? <span className="absolute inset-0 flex items-center justify-center bg-black/60"><Loader2 size={17} className="animate-spin text-cyan-200"/></span> : null}</button>) : <span className="pointer-events-none flex h-16 w-12 items-center justify-center rounded border border-dashed text-[8px]" style={{ borderColor: `${group.color}45`, color: `${group.color}90` }}>Drop</span>}</div>
         </div>
         {groupIndex < playerGroups.length - 1 ? <span className="h-[70%] w-px shrink-0" style={{ backgroundColor: `${group.color}80` }}/>: null}
       </div>)}
@@ -357,8 +389,10 @@ const periodStyles = [
   { short: "2H End", color: "#a78bfa" },
 ];
 
-function VideoPanel({ sourceUrl, videoRef, duration, currentTime, rate, playing, previewEnd, lastAction, match, currentPeriod, setDuration, setCurrentTime, setPlaying, setPreviewEnd, setRate, seekTo, onChoose, onDeleteLast, onSetPeriodMarker, identificationControl, onEnded }: { sourceUrl: string | null; videoRef: RefObject<HTMLVideoElement | null>; duration: number; currentTime: number; rate: number; playing: boolean; previewEnd: number | null; lastAction: ActionRecord | null; match: MatchDetail; currentPeriod: number | null; setDuration: (value: number) => void; setCurrentTime: (value: number) => void; setPlaying: (value: boolean) => void; setPreviewEnd: (value: number | null) => void; setRate: (value: number) => void; seekTo: (value: number) => void; onChoose: () => void; onDeleteLast: () => void; onSetPeriodMarker: (key: PeriodMarkerKey) => void; identificationControl: React.ReactNode; onEnded: () => void }) {
-  return <Panel className="flex min-h-0 flex-col overflow-hidden md:h-[calc(100dvh-10rem)]">
+function VideoPanel({ sourceUrl, videoRef, duration, currentTime, rate, playing, previewEnd, lastAction, match, currentPeriod, soundEnabled, scoreSaving, onScoreChange, onScoreUndo, setDuration, setCurrentTime, setPlaying, setPreviewEnd, setRate, seekTo, onChoose, onDeleteLast, onSetPeriodMarker, identificationControl, onEnded }: { sourceUrl: string | null; videoRef: RefObject<HTMLVideoElement | null>; duration: number; currentTime: number; rate: number; playing: boolean; previewEnd: number | null; lastAction: ActionRecord | null; match: MatchDetail; currentPeriod: number | null; soundEnabled: boolean; scoreSaving: boolean; onScoreChange: (score: BroadcastState) => void; onScoreUndo: () => void; setDuration: (value: number) => void; setCurrentTime: (value: number) => void; setPlaying: (value: boolean) => void; setPreviewEnd: (value: number | null) => void; setRate: (value: number) => void; seekTo: (value: number) => void; onChoose: () => void; onDeleteLast: () => void; onSetPeriodMarker: (key: PeriodMarkerKey) => void; identificationControl: React.ReactNode; onEnded: () => void }) {
+  useEffect(() => { if (videoRef.current) videoRef.current.muted = !soundEnabled; }, [soundEnabled, sourceUrl, videoRef]);
+  return <Panel className="relative flex min-h-0 flex-col overflow-hidden md:h-[calc(100dvh-10rem)]">
+    <BroadcastScoreboard match={match} currentTime={currentTime} editable saving={scoreSaving} onChange={onScoreChange} onUndo={onScoreUndo}/>
     <div className="relative aspect-video min-h-0 bg-black md:flex-1 md:aspect-auto">{sourceUrl ? <video ref={videoRef} src={sourceUrl} crossOrigin="anonymous" className="h-full w-full object-contain" playsInline onLoadedMetadata={(event) => { setDuration(event.currentTarget.duration); event.currentTarget.playbackRate = rate; }} onTimeUpdate={(event) => { setCurrentTime(event.currentTarget.currentTime); if (previewEnd !== null && event.currentTarget.currentTime >= previewEnd - .04) { event.currentTarget.pause(); event.currentTarget.currentTime = previewEnd; setPreviewEnd(null); } }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={onEnded}/> : <button onClick={onChoose} className="flex h-full w-full flex-col items-center justify-center p-6 text-center"><FileVideo size={38} className="text-cyan-300"/><h2 className="mt-3 text-sm font-bold text-white">Upload the match video</h2><p className="mt-1 text-xs text-slate-500">It will be stored privately in Cloudflare R2.</p></button>}</div>
     <div className="shrink-0 border-t border-white/10 bg-pitch-950/95 p-2">
       <input aria-label="Video position" type="range" min={0} max={duration || 0} step={.1} value={Math.min(currentTime, duration || 0)} disabled={!sourceUrl} onChange={(event) => seekTo(Number(event.target.value))} className="w-full accent-cyan-300"/>

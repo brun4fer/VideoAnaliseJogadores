@@ -7,11 +7,11 @@ export function attacksRightInPeriod(firstHalfAttacksRight: boolean, period: num
 
 export function normalizeFieldPoint(point: FieldPoint, period: number | null, firstHalfAttacksRight: boolean): FieldPoint {
   if (attacksRightInPeriod(firstHalfAttacksRight, period) !== false) return point;
-  return { x: 100 - point.x, y: 100 - point.y };
+  return { x: 100 - point.x, y: point.y };
 }
 
 export function attackDirectionLabel(firstHalfAttacksRight: boolean, period: number | null) {
   const attacksRight = attacksRightInPeriod(firstHalfAttacksRight, period);
   if (attacksRight === null) return "Awaiting period markers";
-  return attacksRight ? "Left to right" : "Right to left";
+  return attacksRight ? "Attack →" : "← Attack";
 }

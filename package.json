@@ -13,6 +13,7 @@
     "media:push": "prisma db push --schema prisma-media/schema.prisma",
     "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
     "images:migrate": "node --env-file=.env --experimental-strip-types scripts/migrate-images-to-r2.mjs"
   },
   "dependencies": {

@@ -8,9 +8,9 @@ datasource db {
 }
 
 model Workspace {
-  id                         String        @id @default(cuid())
+  id                         String                        @id @default(cuid())
   name                       String
-  activeClientClubId         String?       @unique
+  activeClientClubId         String?                       @unique
   managementPasswordHash     String?
   globalAccessPasswordHash   String?
   matchesAccessPasswordHash  String?
@@ -19,15 +19,15 @@ model Workspace {
   reportsAccessPasswordHash  String?
   squadAccessPasswordHash    String?
   analysisAccessPasswordHash String?
-  createdAt                  DateTime      @default(now())
-  updatedAt                  DateTime      @updatedAt
+  createdAt                  DateTime                      @default(now())
+  updatedAt                  DateTime                      @updatedAt
   seasons                    Season[]
   competitions               Competition[]
   clubs                      Club[]
   players                    Player[]
   matches                    Match[]
   users                      User[]
-  activeClientClub           Club?         @relation("ActiveClientClub", fields: [activeClientClubId], references: [id], onDelete: SetNull)
+  activeClientClub           Club?                         @relation("ActiveClientClub", fields: [activeClientClubId], references: [id], onDelete: SetNull)
   footballConnection         FootballOurPlayersConnection?
 }
 
@@ -141,35 +141,35 @@ model Club {
 }
 
 model Player {
-  id              String         @id @default(cuid())
-  name            String
-  shirtNumber     Int?
-  photoUrl        String?
-  photoStorageKey String?        @unique
-  photoFileName   String?
-  photoFileSize   Int?
-  photoMimeType   String?
-  photoEtag       String?
-  photoUploadedAt DateTime?
-  position        String?
-  isGoalkeeper    Boolean        @default(false)
-  active          Boolean        @default(true)
+  id               String         @id @default(cuid())
+  name             String
+  shirtNumber      Int?
+  photoUrl         String?
+  photoStorageKey  String?        @unique
+  photoFileName    String?
+  photoFileSize    Int?
+  photoMimeType    String?
+  photoEtag        String?
+  photoUploadedAt  DateTime?
+  position         String?
+  isGoalkeeper     Boolean        @default(false)
+  active           Boolean        @default(true)
   footballSyncedAt DateTime?
-  clubId          String
-  workspaceId     String
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  club            Club           @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  actions         PlayerAction[]
-  matchSquads     MatchSquad[]
+  clubId           String
+  workspaceId      String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  club             Club           @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  workspace        Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actions          PlayerAction[]
+  matchSquads      MatchSquad[]
 
   @@index([clubId])
   @@index([workspaceId])
 }
 
 model Match {
-  id                     String         @id @default(cuid())
+  id                     String            @id @default(cuid())
   matchDate              DateTime?
   roundName              String?
   venue                  String?
@@ -178,27 +178,50 @@ model Match {
   opponentClubId         String
   competitionId          String
   workspaceId            String
-  homeAway               HomeAway       @default(HOME)
-  firstHalfAttacksRight  Boolean        @default(true)
+  homeAway               HomeAway          @default(HOME)
+  firstHalfAttacksRight  Boolean           @default(true)
   firstHalfStartSeconds  Float?
   firstHalfEndSeconds    Float?
   secondHalfStartSeconds Float?
   secondHalfEndSeconds   Float?
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
+  scoreboardEnabled      Boolean           @default(false)
+  homeClubName           String?
+  awayClubName           String?
+  homeClubShortName      String?
+  awayClubShortName      String?
+  homeTeamColor          String            @default("#22D3EE")
+  awayTeamColor          String            @default("#EF4444")
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
   footballSyncedAt       DateTime?
-  club                   Club           @relation("AnalyzedClub", fields: [clubId], references: [id], onDelete: Restrict)
-  opponentClub           Club           @relation("OpponentClub", fields: [opponentClubId], references: [id], onDelete: Restrict)
-  competition            Competition    @relation(fields: [competitionId], references: [id], onDelete: Restrict)
-  workspace              Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  club                   Club              @relation("AnalyzedClub", fields: [clubId], references: [id], onDelete: Restrict)
+  opponentClub           Club              @relation("OpponentClub", fields: [opponentClubId], references: [id], onDelete: Restrict)
+  competition            Competition       @relation(fields: [competitionId], references: [id], onDelete: Restrict)
+  workspace              Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   video                  Video?
   playerActions          PlayerAction[]
   squad                  MatchSquad[]
+  scoreEvents            MatchScoreEvent[]
 
   @@index([workspaceId])
   @@index([clubId])
   @@index([opponentClubId])
   @@index([competitionId])
+}
+
+model MatchScoreEvent {
+  id           String   @id @default(cuid())
+  matchId      String
+  timeSeconds  Float
+  homeScore    Int
+  awayScore    Int
+  homeRedCards Int      @default(0)
+  awayRedCards Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  match        Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, timeSeconds])
 }
 
 model MatchSquad {
