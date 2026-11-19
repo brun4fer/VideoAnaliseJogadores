@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { AlertTriangle, BarChart3, Home, LockKeyhole, LogOut, Map, Plus, UsersRound } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BarChart3, Home, LockKeyhole, LogOut, Map, Plus, UsersRound } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { apiFetch } from "@/lib/http";
 import { PwaInstallButton } from "@/components/pwa-install-button";
@@ -18,6 +18,7 @@ const links = [
   { href: "/reports", label: "Reports", icon: BarChart3, area: "reports" as const },
   { href: "/structure", label: "Squad", icon: UsersRound, area: "squad" as const },
 ];
+const PORTAL_URL = "https://ap-football-portal.vercel.app";
 
 type Account = { name: string; teamName: string | null; accessControl: { globalUnlocked: boolean; unlockedAreas: AccessArea[] } };
 type Presence = { activeElsewhere: boolean; otherActiveSessions: number };
@@ -90,7 +91,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-cyan-300/30 bg-cyan-300/10 text-cyan-200 shadow-glow"><UsersRound size={20} /></span>
           <span className="min-w-0"><span className="block truncate text-sm font-semibold text-cyan-100">{account?.teamName?.toUpperCase() || "AP · OUR TEAM PERFORMANCE"}</span><span className="block truncate text-xs text-slate-400">{account?.name || "Our Team Performance"}</span></span>
         </Link>
-        <div className="flex min-w-0 items-center gap-2"><nav className="flex min-w-0 items-center gap-1 overflow-x-auto rounded-lg border border-white/10 bg-white/[.03] p-1">
+        <div className="flex min-w-0 items-center gap-2"><a href={PORTAL_URL} className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-2 text-xs text-cyan-100 transition hover:bg-cyan-300/10 hover:text-cyan-200" title="Voltar ao All-in-One Football Ecosystem"><ArrowLeft size={16}/><span className="hidden 2xl:inline">All-in-One</span></a><nav className="flex min-w-0 items-center gap-1 overflow-x-auto rounded-lg border border-white/10 bg-white/[.03] p-1">
           {links.map(({ href, label, icon: Icon, area }) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return <Link key={href} href={href} onClick={(event) => {
