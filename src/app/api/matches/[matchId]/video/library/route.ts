@@ -18,7 +18,7 @@ export async function POST(request: Request, context: { params: Promise<{ matchI
 
     const [match, asset] = await Promise.all([
       prisma.match.findFirst({ where: { id: matchId, workspaceId: workspace.id }, include: { video: true } }),
-      mediaPrisma.mediaAsset.findFirst({ where: { id: mediaAssetId, mediaWorkspaceId: mediaWorkspace.id, storageStatus: "READY" } }),
+      mediaPrisma.mediaAsset.findFirst({ where: { id: mediaAssetId, mediaWorkspaceId: mediaWorkspace.id, createdByAppId: appId, storageStatus: "READY" } }),
     ]);
     if (!match) return notFound("Match not found.");
     if (!asset) return notFound("This cloud video is not available in your workspace.");
